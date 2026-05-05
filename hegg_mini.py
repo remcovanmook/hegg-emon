@@ -70,7 +70,7 @@ logger = logging.getLogger("hegg_mini")
 
 _HERE         = os.path.dirname(os.path.abspath(__file__))
 _STATIC_ROOT  = os.path.join(_HERE, "dashboard", "static")
-_TEMPLATE     = os.path.join(_HERE, "dashboard", "templates", "dashboard.html")
+_TEMPLATE     = os.path.join(_STATIC_ROOT, "dashboard.html")
 
 # ---------------------------------------------------------------------------
 # Shared state
