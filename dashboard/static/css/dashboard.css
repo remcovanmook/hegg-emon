@@ -236,6 +236,50 @@ html, body {
 .summary-delta--pos { color: var(--delivered-color); }
 .summary-delta--neg { color: var(--returned-color); }
 
+/* Tariff breakdown inside an energy summary cell */
+.summary-tariffs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.summary-tariff {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.64rem;
+}
+
+.tariff-label {
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  min-width: 14px;
+}
+
+.tariff-value {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--text-muted);
+}
+
+.tariff-unit {
+  color: var(--text-dim);
+  font-size: 0.58rem;
+}
+
+.tariff-delta {
+  margin-left: auto;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--text-dim);
+  font-size: 0.6rem;
+}
+
+.tariff-delta--pos { color: var(--delivered-color); opacity: 0.75; }
+.tariff-delta--neg { color: var(--returned-color);  opacity: 0.75; }
+
 /* ── Power import/export display ── */
 .power-display {
   background: var(--surface);
@@ -504,7 +548,7 @@ html, body {
 
 /* Compact inline chart inside a phase card */
 .chart-wrapper--inline {
-  height: 72px;
+  height: 144px;
   margin-top: 14px;
 }
 

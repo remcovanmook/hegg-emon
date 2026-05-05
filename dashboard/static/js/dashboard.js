@@ -92,7 +92,7 @@ function makeInlineOpts(tickFmt) {
       x: { display: false, type: "time" },
       y: {
         display: true,
-        position: "right",
+        position: "left",
         ticks: {
           maxTicksLimit: 3,
           color: "#6b7490",
@@ -344,11 +344,18 @@ async function loadSummaryLatest() {
     s = await res.json();
   } catch { return; }
 
-  setText("energy-in-t1",  fmt1(s.energy_delivered_t1));
-  setText("energy-in-t2",  fmt1(s.energy_delivered_t2));
-  setText("energy-out-t1", fmt1(s.energy_returned_t1));
-  setText("energy-out-t2", fmt1(s.energy_returned_t2));
-  setText("gas-delivered",  fmt1(s.gas_delivered));
+  const inT1  = s.energy_delivered_t1 ?? 0;
+  const inT2  = s.energy_delivered_t2 ?? 0;
+  const outT1 = s.energy_returned_t1  ?? 0;
+  const outT2 = s.energy_returned_t2  ?? 0;
+
+  setText("energy-in-total",  (inT1  + inT2).toFixed(1));
+  setText("energy-out-total", (outT1 + outT2).toFixed(1));
+  setText("energy-in-t1",     inT1.toFixed(1));
+  setText("energy-in-t2",     inT2.toFixed(1));
+  setText("energy-out-t1",    outT1.toFixed(1));
+  setText("energy-out-t2",    outT2.toFixed(1));
+  setText("gas-delivered",    fmt1(s.gas_delivered));
 }
 
 /**
@@ -365,11 +372,19 @@ async function loadSummaryDelta(hours) {
   } catch { return; }
 
   const label = hours >= 24 ? `${Math.round(hours / 24)}d` : `${hours}h`;
-  setDelta("energy-in-t1-delta",  d.energy_delivered_t1, label, "kWh");
-  setDelta("energy-in-t2-delta",  d.energy_delivered_t2, label, "kWh");
-  setDelta("energy-out-t1-delta", d.energy_returned_t1,  label, "kWh");
-  setDelta("energy-out-t2-delta", d.energy_returned_t2,  label, "kWh");
-  setDelta("gas-delta",           d.gas_delivered,        label, "m³");
+
+  // Totals (sum of both tariffs)
+  const inTotal  = (d.energy_delivered_t1 ?? 0) + (d.energy_delivered_t2 ?? 0);
+  const outTotal = (d.energy_returned_t1  ?? 0) + (d.energy_returned_t2  ?? 0);
+  setDelta("energy-in-total-delta",  inTotal,                 label, "kWh");
+  setDelta("energy-out-total-delta", outTotal,                label, "kWh");
+
+  // Per-tariff breakdown (shown as tariff-delta elements)
+  setTariffDelta("energy-in-t1-delta",  d.energy_delivered_t1, label);
+  setTariffDelta("energy-in-t2-delta",  d.energy_delivered_t2, label);
+  setTariffDelta("energy-out-t1-delta", d.energy_returned_t1,  label);
+  setTariffDelta("energy-out-t2-delta", d.energy_returned_t2,  label);
+  setDelta("gas-delta",                 d.gas_delivered,        label, "m³");
 }
 
 /** Fetch static device info (IP, model, serial, WiFi RSSI, SW). */
@@ -389,11 +404,26 @@ async function loadDevice() {
 }
 
 function clearDeltas() {
-  ["energy-in-t1-delta","energy-in-t2-delta",
+  ["energy-in-total-delta","energy-out-total-delta",
+   "energy-in-t1-delta","energy-in-t2-delta",
    "energy-out-t1-delta","energy-out-t2-delta","gas-delta"].forEach(id => {
     const e = document.getElementById(id);
-    if (e) { e.textContent = ""; e.className = "summary-delta"; }
+    if (e) { e.textContent = ""; e.className = e.classList.contains("tariff-delta") ? "tariff-delta" : "summary-delta"; }
   });
+}
+
+/**
+ * Set a compact per-tariff delta (no unit suffix, smaller display).
+ * @param {string} id
+ * @param {number} value
+ * @param {string} period
+ */
+function setTariffDelta(id, value, period) {
+  const e = document.getElementById(id);
+  if (!e || value == null) return;
+  const sign = value >= 0 ? "+" : "";
+  e.textContent = `${sign}${value.toFixed(3)} / ${period}`;
+  e.className   = `tariff-delta ${value >= 0 ? "tariff-delta--pos" : "tariff-delta--neg"}`;
 }
 
 /**

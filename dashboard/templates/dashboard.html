@@ -46,47 +46,77 @@
     <section class="section section--summary" aria-labelledby="summary-heading">
       <h1 id="summary-heading" class="sr-only">Summary</h1>
       <div class="summary-strip">
-        <div class="summary-item summary-item--tariff">
-          <div class="summary-label">Energy in T1</div>
-          <div class="summary-value" id="energy-in-t1">—</div>
+
+        <!-- Energy In -->
+        <div class="summary-item">
+          <div class="summary-label">Energy In</div>
+          <div class="summary-value" id="energy-in-total">—</div>
           <div class="summary-unit">kWh</div>
-          <span class="summary-delta" id="energy-in-t1-delta"></span>
+          <span class="summary-delta" id="energy-in-total-delta"></span>
+          <div class="summary-tariffs">
+            <div class="summary-tariff">
+              <span class="tariff-label">T1</span>
+              <span class="tariff-value" id="energy-in-t1">—</span>
+              <span class="tariff-unit">kWh</span>
+              <span class="tariff-delta" id="energy-in-t1-delta"></span>
+            </div>
+            <div class="summary-tariff">
+              <span class="tariff-label">T2</span>
+              <span class="tariff-value" id="energy-in-t2">—</span>
+              <span class="tariff-unit">kWh</span>
+              <span class="tariff-delta" id="energy-in-t2-delta"></span>
+            </div>
+          </div>
         </div>
-        <div class="summary-item summary-item--tariff">
-          <div class="summary-label">Energy in T2</div>
-          <div class="summary-value" id="energy-in-t2">—</div>
+
+        <!-- Energy Out -->
+        <div class="summary-item">
+          <div class="summary-label">Energy Out</div>
+          <div class="summary-value" id="energy-out-total">—</div>
           <div class="summary-unit">kWh</div>
-          <span class="summary-delta" id="energy-in-t2-delta"></span>
+          <span class="summary-delta" id="energy-out-total-delta"></span>
+          <div class="summary-tariffs">
+            <div class="summary-tariff">
+              <span class="tariff-label">T1</span>
+              <span class="tariff-value" id="energy-out-t1">—</span>
+              <span class="tariff-unit">kWh</span>
+              <span class="tariff-delta" id="energy-out-t1-delta"></span>
+            </div>
+            <div class="summary-tariff">
+              <span class="tariff-label">T2</span>
+              <span class="tariff-value" id="energy-out-t2">—</span>
+              <span class="tariff-unit">kWh</span>
+              <span class="tariff-delta" id="energy-out-t2-delta"></span>
+            </div>
+          </div>
         </div>
-        <div class="summary-item summary-item--tariff">
-          <div class="summary-label">Energy out T1</div>
-          <div class="summary-value" id="energy-out-t1">—</div>
-          <div class="summary-unit">kWh</div>
-          <span class="summary-delta" id="energy-out-t1-delta"></span>
-        </div>
-        <div class="summary-item summary-item--tariff">
-          <div class="summary-label">Energy out T2</div>
-          <div class="summary-value" id="energy-out-t2">—</div>
-          <div class="summary-unit">kWh</div>
-          <span class="summary-delta" id="energy-out-t2-delta"></span>
-        </div>
+
+        <!-- Gas -->
         <div class="summary-item">
           <div class="summary-label">Gas</div>
           <div class="summary-value" id="gas-delivered">—</div>
           <div class="summary-unit">m³</div>
           <span class="summary-delta" id="gas-delta"></span>
         </div>
+
+        <!-- Device (model + IP + serial + WiFi + SW) -->
         <div class="summary-item summary-item--device">
           <div class="summary-label">Device</div>
           <div class="summary-value summary-value--sm" id="device-model">—</div>
           <div class="summary-unit" id="device-ip">—</div>
           <div class="summary-unit" id="device-serial">—</div>
+          <div class="summary-tariffs">
+            <div class="summary-tariff">
+              <span class="tariff-label">WiFi</span>
+              <span class="tariff-value" id="device-rssi">—</span>
+            </div>
+            <div class="summary-tariff">
+              <span class="tariff-label">SW</span>
+              <span class="tariff-value" id="device-sw">—</span>
+            </div>
+          </div>
         </div>
-        <div class="summary-item">
-          <div class="summary-label">Signal</div>
-          <div class="summary-value summary-value--sm" id="device-rssi">—</div>
-          <div class="summary-unit">SW <span id="device-sw">—</span></div>
-        </div>
+
       </div>
     </section>
 
