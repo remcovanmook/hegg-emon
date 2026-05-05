@@ -1,0 +1,36 @@
+# grafana/docker-compose.yml
+#
+# Runs a local Grafana instance with the Hegg dashboard pre-provisioned.
+#
+# Usage:
+#   cp provisioning/datasources/influxdb.yaml.example \
+#      provisioning/datasources/influxdb.yaml
+#   # Edit provisioning/datasources/influxdb.yaml with your InfluxDB details
+#   docker compose up -d
+#
+# Grafana → http://localhost:3000  (default login: admin / admin)
+
+services:
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: hegg-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin   # change for production
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: >-
+        /etc/grafana/provisioning/dashboards/hegg_energy.json
+    volumes:
+      # Datasource credentials (copy from .example and fill in)
+      - ./provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      # Dashboard provisioning config
+      - ./provisioning/dashboards/hegg.yaml:/etc/grafana/provisioning/dashboards/hegg.yaml:ro
+      # The dashboard JSON itself
+      - ./dashboards/hegg_energy.json:/etc/grafana/provisioning/dashboards/hegg_energy.json:ro
+      # Persistent Grafana state (user preferences, annotations, etc.)
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  grafana_data:

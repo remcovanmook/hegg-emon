@@ -1,0 +1,17 @@
+# grafana/provisioning/dashboards/hegg.yaml
+#
+# Tells Grafana where to find the provisioned dashboard JSON.
+# No edits needed — dashboards/hegg_energy.json is picked up automatically.
+
+apiVersion: 1
+
+providers:
+  - name: Hegg Energy Monitor
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/hegg_energy.json
+      foldersFromFilesStructure: false
