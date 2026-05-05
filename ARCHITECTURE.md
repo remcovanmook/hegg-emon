@@ -2,168 +2,189 @@
 
 ## Overview
 
-Receives 1 Hz UDP broadcasts from a Hegg energy monitor device and distributes the data to three consumers:
+SQLite is the shared data bus.  One writer, multiple independent readers.
 
-| Consumer | Entry point | Port |
-|---|---|---|
-| Live dashboard (Flask + SSE) | `dashboard/app.py` | 8080 |
-| Prometheus metrics | `hegg/prometheus_exporter.py` | 9101 |
-| Home Assistant (MQTT) | `hegg/ha_publisher.py` | depends on broker |
+```
+Hegg device (UDP broadcast, 1 Hz)
+        │
+        ▼
+hegg_collector.py          raw blocking UDP socket → HeggStore.insert()
+        │
+        ▼
+   hegg.db  (SQLite)
+        │
+   ┌────┴──────────────────┬──────────────────────┐
+   ▼                       ▼                      ▼
+dashboard/app.py    prometheus_exporter.py    ha_publisher.py
+Flask + SSE         HeggExporter.update()     (not yet wired)
+port 8080           poll loop, port 9101
+```
 
-All three consumers are wired together by the unified launcher `hegg_server.py`.
+All consumers go through `HeggStore` — no component writes raw SQL except the
+store itself.
 
 ---
 
-## Component diagram
+## Components
 
-```
-  ┌─────────────────────────────────────────────────────────────────┐
-  │  Hegg device                                                    │
-  │  UDP broadcast → <subnet>.255:16121, 1 msg/s                   │
-  └──────────────────────────┬──────────────────────────────────────┘
-                             │
-                    ┌────────▼─────────────────────────┐
-                    │  _run_listener()                 │   dashboard/app.py
-                    │  raw blocking UDP socket         │
-                    │  daemon thread, port 16121       │
-                    └──┬──────────────┬────────────────┘
-                       │              │
-           ┌───────────▼──┐   ┌───────▼────────┐   ┌──────────────┐
-           │  HeggStore   │   │  HeggExporter  │   │ HAPublisher  │
-           │  (SQLite)    │   │  (prometheus)  │   │  (MQTT / HA) │
-           └──────┬───────┘   └───┬────────────┘   └──────┬───────┘
-                  │               │                        │
-           Flask /stream    GET /metrics             MQTT broker
-           SSE poll loop    port 9101             → Home Assistant
-           port 8080
-                  │
-           Browser EventSource
-           Chart.js + annotation
-```
+### `hegg/reading.py`
 
----
+`HeggReading` dataclass.  No external dependencies.
 
-## Module descriptions
-
-### `hegg/listener.py`
-
-Provides `HeggReading` (the core data model) and an asyncio-based `HeggListener` for
-standalone use (Prometheus-only, tests, scripts).
-
-- `HeggReading` — dataclass holding one parsed reading; `from_dict` / `to_dict` for
-  (de)serialisation.
-- `_HeggProtocol` — asyncio `DatagramProtocol`; parses JSON on receipt and schedules
-  handler coroutines as tasks.
-- `HeggListener` — manages the UDP socket lifecycle and the handler registry.
-
-> Note: the dashboard uses its own `_run_listener()` (a raw blocking socket in a daemon
-> thread) rather than `HeggListener`, because Flask runs in a synchronous WSGI context.
+- `from_dict(data)` — parse from device JSON payload or store dict.  Handles
+  both `Z`-suffixed and `+00:00`-suffixed ISO 8601 timestamps.
+- `to_dict()` — JSON-serialisable representation.
 
 ### `hegg/store.py`
 
-SQLite persistence layer.
+The single SQLite interface.  Everything else imports this.
 
-- `HeggStore` — wraps a single SQLite connection with thread-safe access.
-- Stores two table types: `readings` (1 s telemetry) and `summaries` (minute packets).
-- `query()` — bucketed aggregation for the history API.
-- `summary_delta()` — cumulative energy / gas delta for a look-back window.
-- `prune()` — removes rows older than the configured retention window.
+| Method | Description |
+|---|---|
+| `insert(reading)` | Write a 1-second reading |
+| `insert_summary(data)` | Write a minute-summary packet |
+| `insert_event(data)` | Write an unknown/raw packet |
+| `latest_reading()` | Most recent reading as `HeggReading`, or `None` |
+| `latest_summary()` | Most recent summary as dict, or `{}` |
+| `query(since, bucket_seconds)` | Bucketed averages for the history API |
+| `query_raw_since(since_ms, limit)` | Raw rows for the SSE stream |
+| `summary_delta(hours)` | Cumulative energy/gas delta over a window |
+| `query_events(limit)` | Recent raw/unknown packets |
+| `prune()` | Delete rows older than the retention window |
 
-### `hegg/prometheus_exporter.py`
+Uses per-thread connections with WAL journal mode.  Schema is created on first
+use of each connection, making `":memory:"` safe for concurrent test isolation.
 
-- `HeggExporter` — updates `prometheus_client` Gauges from a reading.
-  Per-phase metrics (voltage, current) use `phase` labels (l1/l2/l3).
-- `start_http_server()` — thin wrapper around `prometheus_client.start_http_server`.
+### `hegg_collector.py`
 
-### `hegg/ha_publisher.py`
+Standalone UDP → SQLite pipeline.  Single responsibility.
 
-- `MQTTConfig` — dataclass for MQTT connection parameters.
-- `HAPublisher` — sends HA MQTT discovery config on first contact, then publishes
-  a flat JSON state blob to `hegg/<serial>/state` on every reading.
-- Requires `aiomqtt` (not in `requirements.txt` — install separately).
-- Integration is currently scaffolded; `_ha_main()` in `hegg_server.py` keeps the
-  event loop alive but does not yet bridge readings into the MQTT publisher.
+- Binds a raw blocking UDP socket on port 16121.
+- Filters by source port 16120 (Hegg device) and locks onto the first seen
+  device IP (or a pre-configured one).
+- Routes packets by content:
+  - Minute-summary (contains `energy_delivered_tariff1`) → `store.insert_summary()`
+  - Standard 1-second reading → `HeggReading.from_dict()` + `store.insert()`
+  - Unknown structure → `store.insert_event()`
+
+Run standalone: `python hegg_collector.py --device-ip <ip> --db hegg.db`
 
 ### `dashboard/app.py`
 
-Flask application with SSE live stream, REST history API, and SQLite persistence.
+Flask application.  Pure reader — no UDP socket, no threads beyond the prune
+loop.
 
 **Routes:**
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/` | Dashboard HTML page |
-| GET | `/stream` | SSE stream; `data:` events are JSON reading dicts |
-| GET | `/api/latest` | Most recent 1-second reading, or 204 |
-| GET | `/api/summary/latest` | Most recent minute-summary packet, or 204 |
-| GET | `/api/summary/delta` | Energy/gas delta for `?hours=` window |
-| GET | `/api/history` | Bucketed readings for `?hours=` window |
-| GET | `/api/device` | Device identity (IP, serial, model, SW, WiFi RSSI) |
-| GET | `/api/events` | Recent unknown/raw event packets (debug) |
+| GET | `/` | Dashboard HTML |
+| GET | `/stream` | SSE stream of 1-second readings |
+| GET | `/api/latest` | Most recent reading (JSON or 204) |
+| GET | `/api/summary/latest` | Most recent minute summary (JSON or 204) |
+| GET | `/api/summary/delta?hours=N` | Energy/gas delta over N hours |
+| GET | `/api/history?hours=N&bucket=S` | Bucketed readings |
+| GET | `/api/device` | Device identity from latest summary |
+| GET | `/api/events` | Recent unknown packets (debug) |
 
-**SSE implementation:**  
-`/stream` polls the SQLite store for rows newer than the last-seen timestamp, sleeping
-1 s between polls. On connect the most recent stored row is sent immediately so the
-browser has data without waiting for the next cycle.
+SSE: `/stream` polls `store.query_raw_since()` every second.  On connect it
+sends the most recent row immediately.
 
-**Threads started by `create_app()`:**
+Run standalone: `python -m dashboard.app --http-port 8080 --db hegg.db`
 
-| Thread | Purpose |
-|---|---|
-| `hegg-udp` | `_run_listener()` — blocking UDP socket, routes packets to store + extra handlers |
-| `hegg-prune` | `_prune_loop()` — hourly SQLite vacuum of old rows |
+### `hegg/prometheus_exporter.py`
 
-### `dashboard/static/js/dashboard.js`
+`HeggExporter` maintains `prometheus_client` Gauges.
 
-Client-side logic. Chart.js with `chartjs-adapter-date-fns` and `chartjs-plugin-annotation`.
+- `update(reading)` — synchronous; updates all gauges from a `HeggReading`.
+- `start_http_server()` — starts the Prometheus exposition server.
 
-- Connects via `EventSource` to `/stream`.
-- On load, fetches `/api/history` (bucketed), `/api/summary/latest`, `/api/summary/delta`,
-  `/api/device`.
-- Adds vertical flip annotations to **all charts** (power, voltage, current) when
-  `power_delivered` / `power_returned` cross zero.
-- Voltage charts additionally carry horizontal min/max annotations.
+The update loop runs in `hegg_server.py`: a daemon thread calls
+`store.latest_reading()` every 2 seconds and passes the result to
+`exporter.update()`.
+
+### `hegg/ha_publisher.py`
+
+Contains `MQTTConfig` and `HAPublisher` with HA MQTT discovery and state
+payload logic.  Not yet wired to the store — the polling loop that reads
+new readings from SQLite and publishes to MQTT is the missing piece.
 
 ### `hegg_server.py`
 
-Unified launcher:
-1. Optionally starts the Prometheus exporter and passes its `handle` coroutine as an
-   extra handler to the dashboard's UDP listener.
-2. Runs the dashboard in a `daemon=True` thread.
-3. Keeps the main thread alive via `asyncio.run(_ha_main())`.
+Convenience launcher for single-host deployments.  Starts three threads:
+
+| Thread | What it runs |
+|---|---|
+| `hegg-collector` | `hegg_collector.run()` — UDP → SQLite |
+| `hegg-prometheus` | poll loop → `HeggExporter.update()` |
+| main | Flask `app.run()` — blocks until interrupt |
 
 ---
 
-## Data flow — single 1-second packet
+## Data flow
 
 ```
-UDP datagram arrives at _run_listener()
-  → source port / IP filter (port 16120 from locked device IP)
-  → json.loads() + HeggReading.from_dict()
-  → _push_reading()
-      → _latest_reading = reading          (in-memory for /api/latest)
-      → _store.insert(reading)             (SQLite readings table)
-  → extra_handlers (e.g. HeggExporter)
-      → prometheus_client Gauge.set()
+UDP packet arrives at hegg_collector
+  │
+  ├─ minute summary? ──► store.insert_summary()
+  │
+  └─ 1-second reading
+       │
+       ├─► HeggReading.from_dict()
+       └─► store.insert()
 
-Flask /stream generator (runs in its own thread per SSE client)
-  → polls _store.query_raw_since() every 1 s
-  → yields "data: <json>\n\n" for each new row
-  → browser EventSource fires "message"
-  → applyReading() → DOM update + sparkline append
-```
+Flask /stream (per SSE client, its own thread)
+  └─ every 1 s: store.query_raw_since()
+       └─► yield "data: <json>\n\n"
+            └─► browser applyReading() → chart + DOM update
 
-Minute-summary packets (containing cumulative energy totals) take a different branch:
-
-```
-UDP datagram → _run_listener()
-  → "energy_delivered_tariff1" key present → _store.insert_summary()
-  → /api/summary/latest and /api/summary/delta read from summaries table
+Prometheus poll loop (daemon thread, every 2 s)
+  └─ store.latest_reading()
+       └─► HeggExporter.update()
+            └─► Gauge.set() × 9 metrics
 ```
 
 ---
 
-## Prometheus metrics reference
+## Database schema
+
+```sql
+CREATE TABLE readings (
+    ts          INTEGER NOT NULL,   -- Unix ms
+    serial      TEXT    NOT NULL,
+    delivered   REAL    NOT NULL,   -- kW
+    returned    REAL    NOT NULL,   -- kW
+    voltage_l1  REAL, voltage_l2 REAL, voltage_l3 REAL,  -- V
+    current_l1  REAL, current_l2 REAL, current_l3 REAL,  -- A
+    UNIQUE (ts, serial)
+);
+
+CREATE TABLE summaries (
+    ts                  INTEGER NOT NULL UNIQUE,  -- Unix ms
+    serial              TEXT    NOT NULL,
+    sw_version          INTEGER,
+    equipment_id        TEXT,
+    model               TEXT,
+    wifi_rssi           INTEGER,
+    energy_delivered_t1 REAL,   -- kWh
+    energy_delivered_t2 REAL,
+    energy_returned_t1  REAL,
+    energy_returned_t2  REAL,
+    gas_delivered       REAL    -- m³
+);
+
+CREATE TABLE events (
+    id     INTEGER PRIMARY KEY,
+    ts     INTEGER NOT NULL,
+    serial TEXT    NOT NULL,
+    raw    TEXT    NOT NULL,    -- JSON blob
+    UNIQUE (ts, serial)
+);
+```
+
+---
+
+## Prometheus metrics
 
 | Metric | Type | Labels | Unit |
 |---|---|---|---|
@@ -175,31 +196,11 @@ UDP datagram → _run_listener()
 
 ---
 
-## Home Assistant MQTT discovery
-
-Entities are registered under device `hegg_<serial>` using the standard
-`homeassistant/sensor/<device_id>/<field>/config` topic pattern with `retain=True`.
-
-State updates go to `hegg/<serial>/state` as a JSON blob; each sensor uses
-a `value_template` like `{{ value_json.power_delivered }}` to extract its value.
-
----
-
 ## Dependencies
 
 | Package | Purpose | Required |
 |---|---|---|
 | `flask` | Dashboard HTTP server | Yes |
-| `prometheus_client` | Prometheus metrics + exposition | Yes |
-| `aiomqtt` | MQTT client for HA integration | Optional |
-| `pytest` + `pytest-asyncio` | Test runner | Dev |
-
----
-
-## Grafana quick-start
-
-1. Add a Prometheus data source pointing at `http://<host>:9101`.
-2. Use:
-   - `hegg_power_delivered_kw` / `hegg_power_returned_kw` — power graph.
-   - `hegg_voltage_volts{phase=~"l."}` — per-phase voltage.
-   - `hegg_current_amperes{phase=~"l."}` — per-phase current.
+| `prometheus_client` | Metrics + exposition | Yes |
+| `aiomqtt` | MQTT for HA integration | Optional |
+| `pytest` | Test runner | Dev |
