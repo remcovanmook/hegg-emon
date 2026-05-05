@@ -4,12 +4,13 @@
  *
  * Responsibilities:
  *  1. Connect to /stream via EventSource; reconnect on error.
- *  2. Update live-value cards on every reading (power, voltage, current).
+ *  2. Update the power import/export display and phase cards on every reading.
  *  3. Load history from /api/history on init and range change.
- *  4. Load minute-summary from /api/summary/latest on init and every 60 s.
+ *  4. Load minute-summary (absolute + delta) from /api/summary/* on init,
+ *     range change, and every 60 s.
  *  5. Maintain charts:
- *     - powerChart: delivered + returned + net (vertical flip annotations)
- *     - voltageCharts[]: one inline sparkline per phase (horizontal min/max)
+ *     - powerChart: net (delivered − returned) in W; vertical flip markers
+ *     - voltageCharts[]: one inline sparkline per phase; horizontal min/max
  *     - currentChart: all three phases
  */
 
@@ -103,10 +104,8 @@ const voltageExtremes = [
   { min: Infinity, max: -Infinity },
 ];
 
-/** Tracks whether the last point was exporting (returned > delivered). */
 let lastWasExporting = null;
 let flipCount = 0;
-
 let selectedHours = 24;
 
 /* ── DOM ────────────────────────────────────────────────────────────────── */
@@ -117,19 +116,19 @@ document.addEventListener("DOMContentLoaded", () => {
   el = {
     statusDot:      document.getElementById("status-dot"),
     statusLabel:    document.getElementById("status-label"),
-    powerDelivered: document.getElementById("power-delivered"),
-    powerReturned:  document.getElementById("power-returned"),
+    powerDisplay:   document.getElementById("power-display"),
+    powerDirection: document.getElementById("power-direction"),
+    powerNetVal:    document.getElementById("power-net-val"),
     voltageL1:      document.getElementById("voltage-l1"),
     voltageL2:      document.getElementById("voltage-l2"),
     voltageL3:      document.getElementById("voltage-l3"),
     currentL1:      document.getElementById("current-l1"),
     currentL2:      document.getElementById("current-l2"),
     currentL3:      document.getElementById("current-l3"),
-    barDelivered:   document.getElementById("bar-delivered"),
-    barReturned:    document.getElementById("bar-returned"),
     serial:         document.getElementById("device-serial"),
     lastUpdated:    document.getElementById("last-updated"),
     historyRange:   document.getElementById("history-range"),
+    // Summary strip
     energyIn:       document.getElementById("energy-in"),
     energyOut:      document.getElementById("energy-out"),
     gasDelivered:   document.getElementById("gas-delivered"),
@@ -141,14 +140,16 @@ document.addEventListener("DOMContentLoaded", () => {
   initCharts();
   loadHistory(selectedHours);
   loadSummary();
-  connectSSE();
 
   el.historyRange.addEventListener("change", () => {
     selectedHours = parseInt(el.historyRange.value, 10);
     loadHistory(selectedHours);
+    loadSummaryDelta(selectedHours);  // refresh delta for new window
   });
 
-  // Refresh summary every 60 s (it updates once per minute at the device).
+  connectSSE();
+
+  // Summary refreshes once per minute; delta follows the selected window.
   setInterval(loadSummary, 60_000);
 });
 
@@ -156,19 +157,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
 /**
  * Initialise all Chart.js instances.
- * powerChart and currentChart are full-width; voltageCharts are inline sparklines.
  */
 function initCharts() {
   Chart.defaults.color = "#6b7490";
 
-  // Power: delivered, returned, net
+  // Power: net only (positive = import, negative = export)
   powerChart = new Chart(document.getElementById("chart-power"), {
     type: "line",
-    data: {
-      datasets: [
-        makeDataset("Net", COLORS.net, /*fill*/ false),
-      ],
-    },
+    data: { datasets: [makeDataset("Net", COLORS.net, false)] },
     options: deepMerge(BASE_OPTS, {
       scales: { y: { title: { display: true, text: "W", color: "#6b7490", font: { size: 11 } } } },
     }),
@@ -181,7 +177,7 @@ function initCharts() {
       new Chart(document.getElementById(id), {
         type: "line",
         data: { datasets: [makeDataset("V", color)] },
-        options: JSON.parse(JSON.stringify(INLINE_OPTS)), // deep-copy per instance
+        options: JSON.parse(JSON.stringify(INLINE_OPTS)),
       })
     );
   });
@@ -204,9 +200,9 @@ function initCharts() {
 
 /**
  * Build a Chart.js dataset descriptor.
- * @param {string}  label - Tooltip label.
+ * @param {string}  label
  * @param {string}  color - Hex colour.
- * @param {boolean} [fill=true] - Whether to fill the area under the line.
+ * @param {boolean} [fill=true]
  * @returns {object}
  */
 function makeDataset(label, color, fill = true) {
@@ -221,8 +217,7 @@ function makeDataset(label, color, fill = true) {
 }
 
 /**
- * Shallow-merge overrides into a deep copy of base.
- * Handles one level of nesting for scales and plugins.
+ * Shallow-merge overrides into a deep copy of base (one level deep).
  * @param {object} base
  * @param {object} overrides
  * @returns {object}
@@ -257,22 +252,21 @@ async function loadHistory(hours) {
 
   if (!data || data.length === 0) return;
 
-  // Reset state.
   voltageExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
   lastWasExporting = null;
   powerChart.options.plugins.annotation.annotations = {};
   flipCount = 0;
 
-  // Power — net only.
+  // Net power.
   powerChart.data.datasets[0].data = toXY(data, r => Math.round((r.power_delivered - r.power_returned) * 1000));
 
-  // Voltage inline charts + per-phase extremes.
+  // Voltage inline charts.
   const vFields = ["voltage_l1", "voltage_l2", "voltage_l3"];
   vFields.forEach((f, i) => {
     voltageCharts[i].data.datasets[0].data = toXY(data, r => r[f]);
   });
 
-  // Current chart.
+  // Current.
   currentChart.data.datasets[0].data = toXY(data, r => r.current_l1);
   currentChart.data.datasets[1].data = toXY(data, r => r.current_l2);
   currentChart.data.datasets[2].data = toXY(data, r => r.current_l3);
@@ -302,17 +296,25 @@ async function loadHistory(hours) {
 /**
  * Convert a history array to Chart.js {x, y} points.
  * @param {object[]} data
- * @param {function} yFn - Extracts the Y value from a row.
+ * @param {function} yFn
  * @returns {{x: number, y: number}[]}
  */
 function toXY(data, yFn) {
   return data.map(r => ({ x: new Date(r.timestamp).getTime(), y: yFn(r) }));
 }
 
-/* ── Summary load ───────────────────────────────────────────────────────── */
+/* ── Summary load (absolute + delta) ───────────────────────────────────── */
 
-/** Fetch the most recent minute-summary and update the cumulative cards. */
+/**
+ * Fetch the latest summary and the delta for the current window, then
+ * update the summary strip.
+ */
 async function loadSummary() {
+  await Promise.all([loadSummaryLatest(), loadSummaryDelta(selectedHours)]);
+}
+
+/** Fetch and apply the most recent minute-summary (absolute values). */
+async function loadSummaryLatest() {
   let s;
   try {
     const res = await fetch("/api/summary/latest");
@@ -321,15 +323,61 @@ async function loadSummary() {
     s = await res.json();
   } catch { return; }
 
-  const energyIn  = (s.energy_delivered_t1 ?? 0) + (s.energy_delivered_t2 ?? 0);
-  const energyOut = (s.energy_returned_t1  ?? 0) + (s.energy_returned_t2  ?? 0);
+  const energyIn  = ((s.energy_delivered_t1 ?? 0) + (s.energy_delivered_t2 ?? 0));
+  const energyOut = ((s.energy_returned_t1  ?? 0) + (s.energy_returned_t2  ?? 0));
 
-  el.energyIn.textContent    = energyIn.toFixed(1);
-  el.energyOut.textContent   = energyOut.toFixed(1);
-  el.gasDelivered.textContent = (s.gas_delivered ?? 0).toFixed(1);
-  el.deviceModel.textContent = s.model      ?? "—";
-  el.deviceRssi.textContent  = s.wifi_rssi != null ? `${s.wifi_rssi} dBm` : "—";
-  el.deviceSw.textContent    = s.sw_version ?? "—";
+  setText("energy-in",     energyIn.toFixed(1));
+  setText("energy-out",    energyOut.toFixed(1));
+  setText("gas-delivered", (s.gas_delivered ?? 0).toFixed(1));
+  setText("device-model",  s.model      ?? "—");
+  setText("device-rssi",   s.wifi_rssi != null ? `${s.wifi_rssi} dBm` : "—");
+  setText("device-sw",     s.sw_version ?? "—");
+  if (el.serial) el.serial.textContent = s.serial ?? "—";
+}
+
+/**
+ * Fetch the delta summary for the given window and update the delta rows.
+ * @param {number} hours
+ */
+async function loadSummaryDelta(hours) {
+  let d;
+  try {
+    const res = await fetch(`/api/summary/delta?hours=${hours}`);
+    if (res.status === 204) { clearDeltas(); return; }
+    if (!res.ok) return;
+    d = await res.json();
+  } catch { return; }
+
+  const label = hours >= 24
+    ? `${Math.round(hours / 24)}d`
+    : `${hours}h`;
+
+  setDelta("energy-in-delta",  d.energy_delivered, label, "kWh");
+  setDelta("energy-out-delta", d.energy_returned,  label, "kWh");
+  setDelta("gas-delta",        d.gas_delivered,    label, "m³");
+}
+
+/**
+ * Set a delta element's text and colour class.
+ * @param {string} id      - Element ID.
+ * @param {number} value   - Numeric delta.
+ * @param {string} period  - Period label (e.g. "24h").
+ * @param {string} unit    - Unit string.
+ */
+function setDelta(id, value, period, unit) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const sign = value >= 0 ? "+" : "";
+  el.textContent = `${sign}${value.toFixed(2)} ${unit} / ${period}`;
+  el.className = `summary-delta ${value >= 0 ? "summary-delta--pos" : "summary-delta--neg"}`;
+}
+
+/** Clear delta elements when no data is available. */
+function clearDeltas() {
+  ["energy-in-delta", "energy-out-delta", "gas-delta"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = ""; el.className = "summary-delta"; }
+  });
 }
 
 /* ── SSE stream ─────────────────────────────────────────────────────────── */
@@ -367,47 +415,37 @@ function connectSSE() {
 }
 
 /**
- * Update the connection-status pill.
  * @param {"connecting"|"connected"|"disconnected"} state
  * @param {string} label
  */
 function setStatus(state, label) {
-  el.statusDot.className   = `status-dot ${state}`;
+  el.statusDot.className    = `status-dot ${state}`;
   el.statusLabel.textContent = label;
 }
 
 /* ── Reading application ────────────────────────────────────────────────── */
 
-let maxPowerSeen = 1;
-
 /**
- * Apply a fresh reading to the cards and append to charts.
+ * Apply a fresh reading to the power display and phase cards.
  * @param {object} r - Parsed HeggReading dict.
  */
 function applyReading(r) {
   const delivered = r.power_delivered ?? 0;
   const returned  = r.power_returned  ?? 0;
 
-  setValue(el.powerDelivered, Math.round(delivered * 1000));
-  setValue(el.powerReturned,  Math.round(returned  * 1000));
-
-  maxPowerSeen = Math.max(maxPowerSeen, delivered, returned, 0.001);
-  el.barDelivered.style.width = `${(delivered / maxPowerSeen) * 100}%`;
-  el.barReturned.style.width  = `${(returned  / maxPowerSeen) * 100}%`;
-
-  // Direction label above the chart.
-  const dirEl = document.getElementById("power-direction");
-  if (dirEl) {
-    if (delivered > returned) {
-      dirEl.textContent = "Delivered";
-      dirEl.className   = "power-dir power-dir--delivered";
-    } else if (returned > delivered) {
-      dirEl.textContent = "Returned";
-      dirEl.className   = "power-dir power-dir--returned";
-    } else {
-      dirEl.textContent = "Balanced";
-      dirEl.className   = "power-dir";
-    }
+  // Power import/export display.
+  if (delivered > returned) {
+    el.powerDisplay.className    = "power-display power-display--import";
+    el.powerDirection.textContent = "Import from grid";
+    setValue(el.powerNetVal, Math.round(delivered * 1000));
+  } else if (returned > delivered) {
+    el.powerDisplay.className    = "power-display power-display--export";
+    el.powerDirection.textContent = "Export to grid";
+    setValue(el.powerNetVal, Math.round(returned * 1000));
+  } else {
+    el.powerDisplay.className    = "power-display";
+    el.powerDirection.textContent = "Balanced";
+    setValue(el.powerNetVal, 0);
   }
 
   setValue(el.voltageL1, (r.voltage_l1 ?? 0).toFixed(1));
@@ -417,35 +455,44 @@ function applyReading(r) {
   setValue(el.currentL2, (r.current_l2 ?? 0).toFixed(1));
   setValue(el.currentL3, (r.current_l3 ?? 0).toFixed(1));
 
-  el.serial.textContent      = r.serial ?? "—";
-  el.lastUpdated.textContent = new Date(r.timestamp).toLocaleTimeString();
+  if (el.lastUpdated) el.lastUpdated.textContent = new Date(r.timestamp).toLocaleTimeString();
 
   appendToCharts(r);
 }
 
 /**
- * Set element text and trigger the flash animation.
+ * Set element text content and trigger the flash animation.
  * @param {HTMLElement} elem
- * @param {string} val
+ * @param {string|number} val
  */
 function setValue(elem, val) {
-  elem.textContent = val;
+  if (!elem) return;
+  elem.textContent = String(val);
   elem.classList.remove("value-updated");
   void elem.offsetWidth;
   elem.classList.add("value-updated");
 }
 
+/** Set the textContent of an element by ID (no flash animation). */
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
 /* ── Chart live append ──────────────────────────────────────────────────── */
 
 /**
- * Append one live reading to all charts, detect flips and voltage extremes.
+ * Append one live reading to all charts.
  * @param {object} r
  */
 function appendToCharts(r) {
   const ts = new Date(r.timestamp).getTime();
 
-  // Net only.
-  powerChart.data.datasets[0].data.push({ x: ts, y: Math.round((r.power_delivered - r.power_returned) * 1000) });
+  // Net power.
+  powerChart.data.datasets[0].data.push({
+    x: ts,
+    y: Math.round((r.power_delivered - r.power_returned) * 1000),
+  });
 
   const exporting = r.power_returned > r.power_delivered;
   if (lastWasExporting !== null && exporting !== lastWasExporting) {
@@ -480,7 +527,7 @@ function appendToCharts(r) {
 }
 
 /**
- * Drop data points older than cutoff from every dataset in a chart.
+ * Drop points older than cutoff from all datasets in a chart.
  * @param {import('chart.js').Chart} chart
  * @param {number} cutoff - Unix ms.
  */
@@ -493,9 +540,9 @@ function trimOldPoints(chart, cutoff) {
 /* ── Annotations ────────────────────────────────────────────────────────── */
 
 /**
- * Add a vertical dashed line to the power chart at a direction-flip point.
- * @param {number}  tsMs     - Unix ms timestamp.
- * @param {boolean} toExport - True when flipping to grid export.
+ * Add a vertical dashed line at a power-direction flip point.
+ * @param {number}  tsMs
+ * @param {boolean} toExport
  */
 function addFlipAnnotation(tsMs, toExport) {
   const id    = `flip_${flipCount++}`;
@@ -522,53 +569,37 @@ function addFlipAnnotation(tsMs, toExport) {
 }
 
 /**
- * Rebuild the min/max horizontal annotations for one voltage phase chart.
+ * Rebuild the min/max horizontal annotations for one voltage phase chart,
+ * and set the Y scale to include padding above and below.
  * @param {number} phaseIndex - 0=L1, 1=L2, 2=L3.
  */
 function updateVoltageAnnotation(phaseIndex) {
   const { min, max } = voltageExtremes[phaseIndex];
   if (!isFinite(min) || !isFinite(max)) return;
 
-  // Add proportional padding so the line is never flush with the chart edge.
-  const range   = Math.max(max - min, 1);  // avoid zero-range
-  const pad     = Math.max(2, range * 0.25);
-  const chart   = voltageCharts[phaseIndex];
+  const range = Math.max(max - min, 1);
+  const pad   = Math.max(2, range * 0.25);
+  const chart = voltageCharts[phaseIndex];
   chart.options.scales.y.min = min - pad;
   chart.options.scales.y.max = max + pad;
 
   chart.options.plugins.annotation.annotations = {
     vMin: {
-      type: "line",
-      scaleID: "y",
-      value: min,
-      borderColor: "rgba(239,68,68,0.7)",
-      borderWidth: 1,
-      borderDash: [4, 3],
+      type: "line", scaleID: "y", value: min,
+      borderColor: "rgba(239,68,68,0.7)", borderWidth: 1, borderDash: [4, 3],
       label: {
-        display: true,
-        content: `${min.toFixed(1)} V`,
-        position: "start",
-        backgroundColor: "rgba(239,68,68,0.8)",
-        color: "#fff",
-        font: { size: 8, weight: "600" },
-        padding: { x: 3, y: 1 },
+        display: true, content: `${min.toFixed(1)} V`, position: "start",
+        backgroundColor: "rgba(239,68,68,0.8)", color: "#fff",
+        font: { size: 8, weight: "600" }, padding: { x: 3, y: 1 },
       },
     },
     vMax: {
-      type: "line",
-      scaleID: "y",
-      value: max,
-      borderColor: "rgba(59,130,246,0.7)",
-      borderWidth: 1,
-      borderDash: [4, 3],
+      type: "line", scaleID: "y", value: max,
+      borderColor: "rgba(59,130,246,0.7)", borderWidth: 1, borderDash: [4, 3],
       label: {
-        display: true,
-        content: `${max.toFixed(1)} V`,
-        position: "start",
-        backgroundColor: "rgba(59,130,246,0.8)",
-        color: "#fff",
-        font: { size: 8, weight: "600" },
-        padding: { x: 3, y: 1 },
+        display: true, content: `${max.toFixed(1)} V`, position: "start",
+        backgroundColor: "rgba(59,130,246,0.8)", color: "#fff",
+        font: { size: 8, weight: "600" }, padding: { x: 3, y: 1 },
       },
     },
   };

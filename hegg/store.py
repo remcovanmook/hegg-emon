@@ -334,6 +334,51 @@ class HeggStore:
             "gas_delivered":       row[10],
         }
 
+    def summary_delta(self, hours: int) -> dict:
+        """Compute cumulative deltas over the last *hours* hours.
+
+        Subtracts the oldest summary within the window from the most recent
+        one, giving the change in meter readings (kWh delivered/returned,
+        gas) over the selected period.
+
+        Args:
+            hours: Number of hours to look back.
+
+        Returns:
+            Dict with keys ``energy_delivered``, ``energy_returned``,
+            ``gas_delivered`` (all floats), or ``{}`` if fewer than two
+            summary rows exist in the window.
+        """
+        since_ms = int(
+            (datetime.now(timezone.utc) - timedelta(hours=hours)).timestamp() * 1000
+        )
+        oldest = self._conn().execute(
+            """
+            SELECT energy_delivered_t1, energy_delivered_t2,
+                   energy_returned_t1,  energy_returned_t2, gas_delivered
+            FROM summaries WHERE ts >= ? ORDER BY ts ASC LIMIT 1
+            """,
+            (since_ms,),
+        ).fetchone()
+        latest = self._conn().execute(
+            """
+            SELECT energy_delivered_t1, energy_delivered_t2,
+                   energy_returned_t1,  energy_returned_t2, gas_delivered
+            FROM summaries ORDER BY ts DESC LIMIT 1
+            """
+        ).fetchone()
+        if oldest is None or latest is None:
+            return {}
+
+        def _sum(row, i, j):
+            return (row[i] or 0.0) + (row[j] or 0.0)
+
+        return {
+            "energy_delivered": _sum(latest, 0, 1) - _sum(oldest, 0, 1),
+            "energy_returned":  _sum(latest, 2, 3) - _sum(oldest, 2, 3),
+            "gas_delivered":    (latest[4] or 0.0) - (oldest[4] or 0.0),
+        }
+
     def prune(self) -> int:
         """Delete readings and events older than :data:`RETENTION_DAYS`.
 

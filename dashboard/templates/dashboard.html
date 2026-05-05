@@ -42,32 +42,63 @@
 
   <main class="main">
 
+    <!-- ── Summary strip (from latest minute packet) ── -->
+    <section class="section section--summary" aria-labelledby="summary-heading">
+      <h1 id="summary-heading" class="sr-only">Summary</h1>
+      <div class="summary-strip" id="summary-strip">
+        <div class="summary-item">
+          <div class="summary-label">Energy in</div>
+          <div class="summary-value" id="energy-in">—</div>
+          <div class="summary-unit">kWh</div>
+          <span class="summary-delta" id="energy-in-delta"></span>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Energy out</div>
+          <div class="summary-value" id="energy-out">—</div>
+          <div class="summary-unit">kWh</div>
+          <span class="summary-delta" id="energy-out-delta"></span>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Gas</div>
+          <div class="summary-value" id="gas-delivered">—</div>
+          <div class="summary-unit">m³</div>
+          <span class="summary-delta" id="gas-delta"></span>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Model</div>
+          <div class="summary-value summary-value--sm" id="device-model">—</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">WiFi</div>
+          <div class="summary-value summary-value--sm" id="device-rssi">—</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">SW</div>
+          <div class="summary-value summary-value--sm" id="device-sw">—</div>
+        </div>
+        <div class="summary-item summary-item--updated">
+          <div class="summary-label">Device</div>
+          <div class="summary-value summary-value--sm" id="device-serial">—</div>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Power ── -->
     <section class="section" aria-labelledby="power-heading">
-      <h1 id="power-heading" class="section-title">Power</h1>
-      <div class="cards-row">
-        <article class="card card--delivered">
-          <div class="card-icon" aria-hidden="true">↓</div>
-          <div class="card-label">Delivered</div>
-          <div class="card-value" id="power-delivered">—</div>
-          <div class="card-unit">W</div>
-          <div class="card-bar-track" aria-hidden="true">
-            <div class="card-bar-fill" id="bar-delivered"></div>
-          </div>
-        </article>
-        <article class="card card--returned">
-          <div class="card-icon" aria-hidden="true">↑</div>
-          <div class="card-label">Returned</div>
-          <div class="card-value" id="power-returned">—</div>
-          <div class="card-unit">W</div>
-          <div class="card-bar-track" aria-hidden="true">
-            <div class="card-bar-fill" id="bar-returned"></div>
-          </div>
-        </article>
+      <h2 id="power-heading" class="section-title">Power</h2>
+
+      <!-- Single import/export display -->
+      <div class="power-display" id="power-display">
+        <div class="power-direction" id="power-direction">—</div>
+        <div class="power-value-row">
+          <span class="power-value mono" id="power-net-val">—</span>
+          <span class="power-unit">W</span>
+        </div>
       </div>
+
       <div class="chart-card">
-        <div class="chart-label">Power over time — <span id="power-direction" class="power-dir">…</span></div>
-        <div class="chart-wrapper"><canvas id="chart-power" aria-label="Power history"></canvas></div>
+        <div class="chart-label">Power over time</div>
+        <div class="chart-wrapper"><canvas id="chart-power" aria-label="Net power history"></canvas></div>
       </div>
     </section>
 
@@ -140,44 +171,10 @@
       </div>
     </section>
 
-    <!-- ── Energy & Gas totals (from minute summary) ── -->
-    <section class="section" aria-labelledby="totals-heading">
-      <h2 id="totals-heading" class="section-title">Cumulative</h2>
-      <div class="cards-row cards-row--four">
-        <article class="card card--total">
-          <div class="card-icon" aria-hidden="true">↓</div>
-          <div class="card-label">Energy In</div>
-          <div class="card-value" id="energy-in">—</div>
-          <div class="card-unit">kWh</div>
-        </article>
-        <article class="card card--total">
-          <div class="card-icon" aria-hidden="true">↑</div>
-          <div class="card-label">Energy Out</div>
-          <div class="card-value" id="energy-out">—</div>
-          <div class="card-unit">kWh</div>
-        </article>
-        <article class="card card--total">
-          <div class="card-icon" aria-hidden="true">🔥</div>
-          <div class="card-label">Gas</div>
-          <div class="card-value" id="gas-delivered">—</div>
-          <div class="card-unit">m³</div>
-        </article>
-        <article class="card card--total card--device">
-          <div class="card-label">Device</div>
-          <div class="device-info">
-            <div class="device-row"><span class="device-key">Model</span><span class="device-val" id="device-model">—</span></div>
-            <div class="device-row"><span class="device-key">WiFi</span><span class="device-val" id="device-rssi">—</span></div>
-            <div class="device-row"><span class="device-key">SW</span><span class="device-val" id="device-sw">—</span></div>
-          </div>
-        </article>
-      </div>
-    </section>
-
   </main>
 
   <footer class="footer">
     <div class="footer-inner">
-      <span id="device-serial">—</span>
       <span id="last-updated">—</span>
     </div>
   </footer>

@@ -243,6 +243,26 @@ def api_latest() -> Response:
     return jsonify(reading.to_dict())
 
 
+@app.route("/api/summary/delta")
+def api_summary_delta() -> Response:
+    """Return cumulative deltas (delivered, returned, gas) for a time window.
+
+    Query parameters:
+        hours (int): Look-back window in hours. Defaults to 24.
+
+    Returns:
+        JSON dict with ``energy_delivered``, ``energy_returned``,
+        ``gas_delivered`` keys (float kWh / m³), or 204 if no data.
+    """
+    if _store is None:
+        return Response(status=503)
+    hours = int(request.args.get("hours", 24))
+    delta = _store.summary_delta(hours=hours)
+    if not delta:
+        return Response(status=204)
+    return jsonify(delta)
+
+
 @app.route("/api/history")
 def api_history() -> Response:
     """Return bucketed historical readings.
