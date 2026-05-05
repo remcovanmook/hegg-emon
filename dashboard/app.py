@@ -122,6 +122,9 @@ def _run_listener(port: int, extra_handlers: List[Callable],
     logger.info("UDP socket bound to 0.0.0.0:%d", port)
 
     locked_ip: str = device_ip
+    if device_ip:
+        global _device_ip
+        _device_ip = device_ip
 
     try:
         while True:
