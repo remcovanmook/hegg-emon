@@ -588,6 +588,9 @@ function appendToCharts(r) {
   voltageCharts.forEach(c => trimOldPoints(c, cutoff));
   currentCharts.forEach(c => trimOldPoints(c, cutoff));
 
+  // Slide the X window forward so ticks stay aligned to clock boundaries.
+  applyXAxisConfig(selectedHours);
+
   powerChart.update("none");
   voltageCharts.forEach(c => c.update("none"));
   currentCharts.forEach(c => c.update("none"));
@@ -602,21 +605,39 @@ function trimOldPoints(chart, cutoff) {
 /* ── Scale helpers ──────────────────────────────────────────────────────── */
 
 /**
+ * Return the number of milliseconds in one tick unit.
+ * @param {string} unit - 'minute' | 'hour' | 'day'
+ * @returns {number}
+ */
+function stepUnitMs(unit) {
+  if (unit === "day")  return 86_400_000;
+  if (unit === "hour") return  3_600_000;
+  return 60_000; // minute
+}
+
+/**
  * Apply the appropriate X-axis tick unit and step for the given history
- * window so ticks fall on clean boundaries regardless of zoom level.
+ * window so ticks fall on clean clock boundaries.
  *
- * All charts share the same time scale configuration even though only the
- * power chart displays its X axis.
+ * Sets x.min to the largest clean multiple of stepSize that is ≤
+ * (now − window), which forces Chart.js to anchor the first tick there
+ * rather than at the first data point.
+ *
+ * All charts share the same configuration even though only the power chart
+ * displays its X axis; the inline sparklines inherit the same time window.
  *
  * @param {number} hours - The currently selected history window.
  */
 function applyXAxisConfig(hours) {
-  const cfg = AXIS_CONFIG[hours] ?? AXIS_CONFIG[24];
+  const cfg    = AXIS_CONFIG[hours] ?? AXIS_CONFIG[24];
+  const stepMs = cfg.stepSize * stepUnitMs(cfg.unit);
+  const flooredMin = Math.floor((Date.now() - hours * 3_600_000) / stepMs) * stepMs;
+
   [powerChart, ...voltageCharts, ...currentCharts].forEach(chart => {
     const x = chart.options.scales.x;
     x.time.unit     = cfg.unit;
     x.time.stepSize = cfg.stepSize;
-    // Let Chart.js place as many ticks as the stepSize warrants.
+    x.min           = flooredMin;
     x.ticks.maxTicksLimit = 20;
   });
 }
