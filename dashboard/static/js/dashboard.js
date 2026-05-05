@@ -850,9 +850,14 @@ async function loadUsageCharts() {
     }
   }
 
-  // Re-apply x-axis config so x.min matches the selected window,
-  // identical to what the electricity charts do before each update.
+  // Pin the x-axis window to the selected time range.  applyXAxisConfig
+  // sets x.min; also set x.max so Chart.js bar charts do not auto-range
+  // to just the data extent when data starts later than x.min.
   applyXAxisConfig(selectedHours);
+  const _now = Date.now();
+  [usageChart, costChart, gasChart].filter(Boolean).forEach(c => {
+    c.options.scales.x.max = _now;
+  });
 
   if (usageChart) {
     usageChart.data.labels = usageLabels;
