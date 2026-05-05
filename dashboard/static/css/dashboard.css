@@ -1089,20 +1089,20 @@ html, body {
 
 .cost-summary-row {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
+  gap: 0.5rem;
   padding: 0.5rem 1rem 0.75rem;
   border-bottom: 1px solid var(--border);
   margin-bottom: 0.25rem;
 }
 
-.cost-summary-label {
+.cost-summary-sep {
   font-size: 0.8125rem;
   color: var(--text-muted);
 }
 
 .cost-summary-value {
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 600;
   font-family: var(--font-mono, "JetBrains Mono", monospace);
 }

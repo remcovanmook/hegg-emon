@@ -875,10 +875,16 @@ async function loadUsageCharts() {
     costChart.update("none");
   }
 
-  // Net = sum of import costs + sum of export revenues (revenues are negative).
-  const netCost = importCost.reduce((a, b) => a + b, 0)
-                + exportRevenue.reduce((a, b) => a + b, 0);
-  const netEl = document.getElementById("cost-net-total");
+  // Compute totals over the displayed period.
+  const totalImport  =  importCost.reduce((a, b) => a + b, 0);
+  const totalExport  = -exportRevenue.reduce((a, b) => a + b, 0);  // revenue is positive
+  const netCost      = totalImport - totalExport;
+
+  const importEl = document.getElementById("cost-import-total");
+  const exportEl = document.getElementById("cost-export-total");
+  const netEl    = document.getElementById("cost-net-total");
+  if (importEl) importEl.textContent = `€${totalImport.toFixed(2)}`;
+  if (exportEl) exportEl.textContent = `€${totalExport.toFixed(2)}`;
   if (netEl) {
     netEl.textContent = `€${netCost.toFixed(2)}`;
     netEl.className   = "cost-summary-value " + (netCost >= 0 ? "cost-net--positive" : "cost-net--negative");
