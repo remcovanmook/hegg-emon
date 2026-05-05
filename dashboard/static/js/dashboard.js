@@ -752,6 +752,8 @@ function switchTab(tabId) {
  * @returns {object}
  */
 function _barOpts(yLabel, tickFmt, tooltipFmt) {
+  // 2-hour step for 24 h data — matches AXIS_CONFIG[24] on the electricity tab.
+  const stepMs = 2 * 3_600_000;
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -762,11 +764,16 @@ function _barOpts(yLabel, tickFmt, tooltipFmt) {
         type: "time",
         time: {
           unit: "hour",
+          stepSize: 2,
           tooltipFormat: "HH:mm d MMM",
-          displayFormats: { hour: "HH:mm" },
+          displayFormats: { hour: "HH:mm", day: "MMM d" },
         },
-        ticks: { color: "#6b7490", font: { size: 11 } },
+        ticks: { color: "#6b7490", maxTicksLimit: 100, font: { size: 11 } },
         grid:  { color: "rgba(255,255,255,0.04)" },
+        /** Keep only ticks at exact 2-hour boundaries. */
+        afterBuildTicks: scale => {
+          scale.ticks = scale.ticks.filter(t => t.value % stepMs === 0);
+        },
       },
       y: {
         ticks: { color: "#6b7490", font: { size: 11 }, callback: tickFmt },
