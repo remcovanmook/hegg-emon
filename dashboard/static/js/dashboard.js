@@ -784,7 +784,7 @@ function _barOpts(yLabel, tickFmt, tooltipFmt, stacked = false) {
       },
     },
     plugins: {
-      legend:  { display: true, labels: { color: "#6b7490", font: { size: 11 } } },
+      legend:  { display: true, position: "bottom", align: "end", labels: { color: "#6b7490", font: { size: 11 } } },
       tooltip: { callbacks: { label: tooltipFmt } },
     },
   };
