@@ -1047,8 +1047,9 @@ html, body {
 
 /* ── Tab bar ──────────────────────────────────────────────────────────── */
 
-/* Tab panels inherit the column layout of .main */
-[role="tabpanel"] {
+/* Tab panels inherit the column layout of .main.
+   Scoped to :not([hidden]) so the hidden attribute still hides the panel. */
+[role="tabpanel"]:not([hidden]) {
   display: flex;
   flex-direction: column;
   gap: 36px;
