@@ -166,13 +166,11 @@ function initCharts() {
     type: "line",
     data: {
       datasets: [
-        makeDataset("Delivered", COLORS.delivered),
-        makeDataset("Returned",  COLORS.returned),
-        makeDataset("Net",       COLORS.net, /*fill*/ false),
+        makeDataset("Net", COLORS.net, /*fill*/ false),
       ],
     },
     options: deepMerge(BASE_OPTS, {
-      scales: { y: { beginAtZero: true, title: { display: true, text: "W", color: "#6b7490", font: { size: 11 } } } },
+      scales: { y: { title: { display: true, text: "W", color: "#6b7490", font: { size: 11 } } } },
     }),
   });
 
@@ -265,10 +263,8 @@ async function loadHistory(hours) {
   powerChart.options.plugins.annotation.annotations = {};
   flipCount = 0;
 
-  // Power datasets.
-  powerChart.data.datasets[0].data = toXY(data, r => Math.round(r.power_delivered * 1000));
-  powerChart.data.datasets[1].data = toXY(data, r => Math.round(r.power_returned  * 1000));
-  powerChart.data.datasets[2].data = toXY(data, r => Math.round((r.power_delivered - r.power_returned) * 1000));
+  // Power — net only.
+  powerChart.data.datasets[0].data = toXY(data, r => Math.round((r.power_delivered - r.power_returned) * 1000));
 
   // Voltage inline charts + per-phase extremes.
   const vFields = ["voltage_l1", "voltage_l2", "voltage_l3"];
@@ -399,6 +395,21 @@ function applyReading(r) {
   el.barDelivered.style.width = `${(delivered / maxPowerSeen) * 100}%`;
   el.barReturned.style.width  = `${(returned  / maxPowerSeen) * 100}%`;
 
+  // Direction label above the chart.
+  const dirEl = document.getElementById("power-direction");
+  if (dirEl) {
+    if (delivered > returned) {
+      dirEl.textContent = "Delivered";
+      dirEl.className   = "power-dir power-dir--delivered";
+    } else if (returned > delivered) {
+      dirEl.textContent = "Returned";
+      dirEl.className   = "power-dir power-dir--returned";
+    } else {
+      dirEl.textContent = "Balanced";
+      dirEl.className   = "power-dir";
+    }
+  }
+
   setValue(el.voltageL1, (r.voltage_l1 ?? 0).toFixed(1));
   setValue(el.voltageL2, (r.voltage_l2 ?? 0).toFixed(1));
   setValue(el.voltageL3, (r.voltage_l3 ?? 0).toFixed(1));
@@ -433,10 +444,8 @@ function setValue(elem, val) {
 function appendToCharts(r) {
   const ts = new Date(r.timestamp).getTime();
 
-  // Power + net (stored in W).
-  powerChart.data.datasets[0].data.push({ x: ts, y: Math.round(r.power_delivered * 1000) });
-  powerChart.data.datasets[1].data.push({ x: ts, y: Math.round(r.power_returned  * 1000) });
-  powerChart.data.datasets[2].data.push({ x: ts, y: Math.round((r.power_delivered - r.power_returned) * 1000) });
+  // Net only.
+  powerChart.data.datasets[0].data.push({ x: ts, y: Math.round((r.power_delivered - r.power_returned) * 1000) });
 
   const exporting = r.power_returned > r.power_delivered;
   if (lastWasExporting !== null && exporting !== lastWasExporting) {

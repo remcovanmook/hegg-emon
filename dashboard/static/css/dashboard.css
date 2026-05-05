@@ -363,6 +363,18 @@ html, body {
 .leg.l2 { background: var(--phase-l2); }
 .leg.l3 { background: var(--phase-l3); }
 
+/* Dynamic power direction label */
+.power-dir {
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: color 0.3s;
+}
+.power-dir--delivered { color: var(--delivered-color); }
+.power-dir--returned  { color: var(--returned-color); }
+
 .chart-wrapper {
   position: relative;
   height: 240px;
