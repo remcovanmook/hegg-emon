@@ -245,7 +245,64 @@ html, body {
   letter-spacing: 0.04em;
 }
 
-/* ── Energy row layout ── */
+/* ── Summary table ── */
+
+/** One table per summary box; browser table layout gives free column alignment. */
+.summary-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.summary-table td {
+  padding: 2px 4px 2px 0;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+/** Label column: T1, T2, IP, etc. */
+.st-label {
+  font-size: 0.60rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding-right: 6px;
+}
+
+/** Value column: the number. Right-aligned so digits stack. */
+.st-val {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.0rem;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/** Sub-row value: T1/T2 detail rows, slightly smaller and muted. */
+.st-val--sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/** Unit column: kWh, m³, etc. */
+.st-unit {
+  font-size: 0.60rem;
+  color: var(--text-dim);
+  padding-left: 2px;
+  padding-right: 8px;
+}
+
+/** Delta column: the change over the selected period. */
+.st-delta {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+/** JS sets these classes on the <span> inside .st-delta. */
+.energy-delta--pos { color: var(--delivered-color); }
+.energy-delta--neg { color: var(--returned-color); }
 
 .summary-item-header {
   font-size: 0.62rem;
@@ -270,112 +327,6 @@ html, body {
   text-transform: none;
 }
 
-.energy-row {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 2px 0;
-}
-
-.energy-row--sub {
-  padding-left: 0;
-}
-
-.energy-label {
-  font-size: 0.60rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  white-space: nowrap;
-  min-width: 1.6rem;
-  flex-shrink: 0;
-}
-
-.energy-val {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 1.0rem;
-  font-weight: 700;
-  color: var(--text);
-  white-space: nowrap;
-  text-align: right;
-  min-width: 6ch;
-  font-variant-numeric: tabular-nums;
-}
-
-.energy-row--sub .energy-val {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-}
-
-.energy-unit {
-  font-size: 0.62rem;
-  color: var(--text-dim);
-}
-
-.energy-sep {
-  font-size: 0.65rem;
-  color: var(--text-dim);
-  margin: 0 1px;
-}
-
-.energy-delta {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.65rem;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-.energy-delta--pos { color: var(--delivered-color); }
-.energy-delta--neg { color: var(--returned-color); }
-
-.energy-row--sub .energy-delta {
-  opacity: 0.75;
-  font-size: 0.6rem;
-}
-
-.summary-tariffs {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
-}
-
-.summary-tariff {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  font-size: 0.64rem;
-}
-
-.tariff-label {
-  color: var(--text-muted);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  min-width: 14px;
-}
-
-.tariff-value {
-  font-family: "JetBrains Mono", monospace;
-  color: var(--text-muted);
-}
-
-.tariff-unit {
-  color: var(--text-dim);
-  font-size: 0.58rem;
-}
-
-.tariff-delta {
-  margin-left: auto;
-  font-family: "JetBrains Mono", monospace;
-  color: var(--text-dim);
-  font-size: 0.6rem;
-}
-
-.tariff-delta--pos { color: var(--delivered-color); opacity: 0.75; }
-.tariff-delta--neg { color: var(--returned-color);  opacity: 0.75; }
 
 /* ── Power card (display + chart merged) ── */
 

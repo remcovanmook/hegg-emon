@@ -51,87 +51,88 @@
         <!-- Energy In -->
         <div class="summary-item summary-item--energy">
           <div class="summary-item-header">Energy In</div>
-          <div class="energy-row energy-row--main">
-            <span class="energy-label"></span>
-            <span class="energy-val" id="energy-in-total">—</span>
-            <span class="energy-unit">kWh</span>
-            <span class="energy-sep">/</span>
-            <span class="energy-delta" id="energy-in-total-delta"></span>
-          </div>
-          <div class="energy-row energy-row--sub">
-            <span class="energy-label">T1</span>
-            <span class="energy-val" id="energy-in-t1">—</span>
-            <span class="energy-unit">kWh</span>
-            <span class="energy-sep">/</span>
-            <span class="energy-delta" id="energy-in-t1-delta"></span>
-          </div>
-          <div class="energy-row energy-row--sub">
-            <span class="energy-label">T2</span>
-            <span class="energy-val" id="energy-in-t2">—</span>
-            <span class="energy-unit">kWh</span>
-            <span class="energy-sep">/</span>
-            <span class="energy-delta" id="energy-in-t2-delta"></span>
-          </div>
+          <table class="summary-table">
+            <tr>
+              <td class="st-label"></td>
+              <td class="st-val" id="energy-in-total">—</td>
+              <td class="st-unit">kWh</td>
+              <td class="st-delta"><span id="energy-in-total-delta"></span></td>
+            </tr>
+            <tr>
+              <td class="st-label">T1</td>
+              <td class="st-val st-val--sub" id="energy-in-t1">—</td>
+              <td class="st-unit">kWh</td>
+              <td class="st-delta"><span id="energy-in-t1-delta"></span></td>
+            </tr>
+            <tr>
+              <td class="st-label">T2</td>
+              <td class="st-val st-val--sub" id="energy-in-t2">—</td>
+              <td class="st-unit">kWh</td>
+              <td class="st-delta"><span id="energy-in-t2-delta"></span></td>
+            </tr>
+          </table>
         </div>
 
         <!-- Energy Out -->
         <div class="summary-item summary-item--energy">
           <div class="summary-item-header">Energy Out</div>
-          <div class="energy-row energy-row--main">
-            <span class="energy-label"></span>
-            <span class="energy-val" id="energy-out-total">—</span>
-            <span class="energy-unit">kWh</span>
-            <span class="energy-sep">/</span>
-            <span class="energy-delta" id="energy-out-total-delta"></span>
-          </div>
-          <div class="energy-row energy-row--sub">
-            <span class="energy-label">T1</span>
-            <span class="energy-val" id="energy-out-t1">—</span>
-            <span class="energy-unit">kWh</span>
-            <span class="energy-sep">/</span>
-            <span class="energy-delta" id="energy-out-t1-delta"></span>
-          </div>
-          <div class="energy-row energy-row--sub">
-            <span class="energy-label">T2</span>
-            <span class="energy-val" id="energy-out-t2">—</span>
-            <span class="energy-unit">kWh</span>
-            <span class="energy-sep">/</span>
-            <span class="energy-delta" id="energy-out-t2-delta"></span>
-          </div>
+          <table class="summary-table">
+            <tr>
+              <td class="st-label"></td>
+              <td class="st-val" id="energy-out-total">—</td>
+              <td class="st-unit">kWh</td>
+              <td class="st-delta"><span id="energy-out-total-delta"></span></td>
+            </tr>
+            <tr>
+              <td class="st-label">T1</td>
+              <td class="st-val st-val--sub" id="energy-out-t1">—</td>
+              <td class="st-unit">kWh</td>
+              <td class="st-delta"><span id="energy-out-t1-delta"></span></td>
+            </tr>
+            <tr>
+              <td class="st-label">T2</td>
+              <td class="st-val st-val--sub" id="energy-out-t2">—</td>
+              <td class="st-unit">kWh</td>
+              <td class="st-delta"><span id="energy-out-t2-delta"></span></td>
+            </tr>
+          </table>
         </div>
 
         <!-- Gas -->
         <div class="summary-item">
           <div class="summary-item-header">Gas</div>
-          <div class="energy-row energy-row--main">
-            <span class="energy-val" id="gas-delivered">—</span>
-            <span class="energy-unit">m³</span>
-            <span class="energy-sep">/</span>
-            <span class="energy-delta" id="gas-delta"></span>
-          </div>
+          <table class="summary-table">
+            <tr>
+              <td class="st-val" id="gas-delivered">—</td>
+              <td class="st-unit">m³</td>
+              <td class="st-delta"><span id="gas-delta"></span></td>
+            </tr>
+          </table>
         </div>
 
-        <!-- Device — model in header, details as sub-rows -->
+        <!-- Device -->
         <div class="summary-item summary-item--device">
           <div class="summary-item-header">
             Device <span class="header-device-model" id="device-model"></span>
           </div>
-          <div class="energy-row energy-row--sub">
-            <span class="energy-label">IP</span>
-            <span class="energy-val" id="device-ip">—</span>
-          </div>
-          <div class="energy-row energy-row--sub">
-            <span class="energy-label">ID</span>
-            <span class="energy-val" id="device-serial">—</span>
-          </div>
-          <div class="energy-row energy-row--sub">
-            <span class="energy-label">WiFi</span>
-            <span class="energy-val" id="device-rssi">—</span>
-          </div>
-          <div class="energy-row energy-row--sub">
-            <span class="energy-label">SW</span>
-            <span class="energy-val" id="device-sw">—</span>
-          </div>
+          <table class="summary-table">
+            <tr>
+              <td class="st-label">IP</td>
+              <td class="st-val st-val--sub" id="device-ip">—</td>
+            </tr>
+            <tr>
+              <td class="st-label">ID</td>
+              <td class="st-val st-val--sub" id="device-serial">—</td>
+            </tr>
+            <tr>
+              <td class="st-label">WiFi</td>
+              <td class="st-val st-val--sub" id="device-rssi">—</td>
+            </tr>
+            <tr>
+              <td class="st-label">SW</td>
+              <td class="st-val st-val--sub" id="device-sw">—</td>
+            </tr>
+          </table>
         </div>
 
       </div>
