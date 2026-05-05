@@ -151,6 +151,7 @@ pytest
 
 ```
 hegg_server.py          Entry point: collector + dashboard + Prometheus
+hegg_mini.py            Minimal server: UDP → SSE, stdlib only, no database
 hegg_collector.py       Standalone: UDP → SQLite only
 hegg_mqtt.py            Standalone: SQLite → MQTT / Home Assistant
 
@@ -162,7 +163,7 @@ hegg/
 
 dashboard/
   app.py                Flask app, SSE stream, REST API
-  templates/dashboard.html
+  static/dashboard.html
   static/css/dashboard.css
   static/js/dashboard.js
 

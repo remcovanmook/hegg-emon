@@ -14,7 +14,7 @@ Endpoints
 ---------
 
 GET /
-    Dashboard HTML (served from ``dashboard/templates/dashboard.html``).
+    Dashboard HTML (served from ``dashboard/static/dashboard.html``).
 GET /static/<path>
     Static assets (served from ``dashboard/static/``).
 GET /stream
