@@ -815,52 +815,44 @@ async function loadUsageCharts() {
     return;
   }
 
-  // Build price lookup: ts_start (ms) → price_eur_kwh.
+  // Build lookups by hour timestamp.
+  const consumMap = {};
+  for (const c of consumption) consumMap[c.ts] = c;
   const priceMap = {};
   for (const p of prices) priceMap[p.ts_start] = p.price_eur_kwh;
 
-  // Per-hour accumulators.
-  const usageLabels = [], gasLabels = [], costLabels = [];
-  const d1 = [], d2 = [], r1 = [], r2 = [], gas = [];
+  // Generate every UTC hour slot for the full selected window.
+  // Hours with no data get 0 so the x-axis spans the complete range.
+  const HOUR_MS  = 3_600_000;
+  const nowMs    = Date.now();
+  const startMs  = Math.floor((nowMs - selectedHours * HOUR_MS) / HOUR_MS) * HOUR_MS;
+
+  const labels = [], d1 = [], d2 = [], r1 = [], r2 = [], gas = [];
   const importCost = [], exportRevenue = [];
 
-  for (const c of consumption) {
-    const ts      = new Date(c.ts);
-    const price   = priceMap[c.ts] ?? null;
-    const del1    = c.energy_delivered_tariff1 ?? 0;
-    const del2    = c.energy_delivered_tariff2 ?? 0;
-    const ret1    = c.energy_returned_tariff1  ?? 0;
-    const ret2    = c.energy_returned_tariff2  ?? 0;
-    const gasVal  = c.gas_delivered ?? 0;
+  for (let h = startMs; h <= nowMs; h += HOUR_MS) {
+    const c     = consumMap[h];
+    const price = priceMap[h] ?? null;
+    const del1  = c ? (c.energy_delivered_tariff1 ?? 0) : 0;
+    const del2  = c ? (c.energy_delivered_tariff2 ?? 0) : 0;
+    const ret1  = c ? (c.energy_returned_tariff1  ?? 0) : 0;
+    const ret2  = c ? (c.energy_returned_tariff2  ?? 0) : 0;
+    const gasV  = c ? (c.gas_delivered            ?? 0) : 0;
 
-    usageLabels.push(ts);
+    labels.push(new Date(h));
     d1.push(+(del1.toFixed(4)));
     d2.push(+(del2.toFixed(4)));
     r1.push(-(+(ret1.toFixed(4))));
     r2.push(-(+(ret2.toFixed(4))));
-
-    gasLabels.push(ts);
-    gas.push(+(gasVal.toFixed(4)));
-
-    if (price !== null) {
-      costLabels.push(ts);
-      importCost.push(+((del1 + del2) * price).toFixed(4));
-      // Export revenue shown below the axis.
-      exportRevenue.push(-((+(ret1 + ret2) * price).toFixed(4)));
-    }
+    gas.push(+(gasV.toFixed(4)));
+    importCost.push(   price !== null ? +((del1 + del2) * price).toFixed(4) : 0);
+    exportRevenue.push(price !== null ? -(+(ret1 + ret2) * price).toFixed(4) : 0);
   }
 
-  // Pin the x-axis window to the selected time range.  applyXAxisConfig
-  // sets x.min; also set x.max so Chart.js bar charts do not auto-range
-  // to just the data extent when data starts later than x.min.
   applyXAxisConfig(selectedHours);
-  const _now = Date.now();
-  [usageChart, costChart, gasChart].filter(Boolean).forEach(c => {
-    c.options.scales.x.max = _now;
-  });
 
   if (usageChart) {
-    usageChart.data.labels = usageLabels;
+    usageChart.data.labels = labels;
     usageChart.data.datasets[0].data = d1;
     usageChart.data.datasets[1].data = d2;
     usageChart.data.datasets[2].data = r1;
@@ -869,13 +861,13 @@ async function loadUsageCharts() {
   }
 
   if (gasChart) {
-    gasChart.data.labels = gasLabels;
+    gasChart.data.labels = labels;
     gasChart.data.datasets[0].data = gas;
     gasChart.update("none");
   }
 
-  if (costChart && costLabels.length) {
-    costChart.data.labels = costLabels;
+  if (costChart) {
+    costChart.data.labels = labels;
     costChart.data.datasets[0].data = importCost;
     costChart.data.datasets[1].data = exportRevenue;
     costChart.update("none");
