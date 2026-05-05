@@ -222,6 +222,96 @@
       </div>
     </section>
 
+    <!-- ── 3-phase wye phasor diagram ── -->
+    <section class="section" aria-labelledby="wye-heading">
+      <h2 id="wye-heading" class="section-title">3-Phase Wye System</h2>
+      <div class="chart-card wye-card">
+        <div class="wye-layout">
+
+          <!-- SVG phasor diagram -->
+          <div class="wye-diagram-wrap" aria-label="3-phase phasor diagram">
+            <canvas id="wye-canvas" aria-label="Wye phasor diagram"></canvas>
+          </div>
+
+          <!-- Stat table -->
+          <div class="wye-stats">
+            <div class="wye-stats-group">
+              <div class="wye-stats-header">Phase voltages</div>
+              <table class="wye-table" id="wye-phase-table">
+                <tbody>
+                  <tr>
+                    <td class="wt-label"><span class="wye-dot wye-dot--l1"></span>L1</td>
+                    <td class="wt-val mono" id="wye-v-l1">—</td>
+                    <td class="wt-unit">V</td>
+                  </tr>
+                  <tr>
+                    <td class="wt-label"><span class="wye-dot wye-dot--l2"></span>L2</td>
+                    <td class="wt-val mono" id="wye-v-l2">—</td>
+                    <td class="wt-unit">V</td>
+                  </tr>
+                  <tr>
+                    <td class="wt-label"><span class="wye-dot wye-dot--l3"></span>L3</td>
+                    <td class="wt-val mono" id="wye-v-l3">—</td>
+                    <td class="wt-unit">V</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="wye-stats-group">
+              <div class="wye-stats-header">Line differentials</div>
+              <table class="wye-table">
+                <tbody>
+                  <tr>
+                    <td class="wt-label"><span class="wye-dot wye-dot--l12"></span>L1–L2</td>
+                    <td class="wt-val mono" id="wye-diff-l12">—</td>
+                    <td class="wt-unit">V</td>
+                    <td class="wt-ideal" id="wye-ideal-l12"></td>
+                  </tr>
+                  <tr>
+                    <td class="wt-label"><span class="wye-dot wye-dot--l13"></span>L1–L3</td>
+                    <td class="wt-val mono" id="wye-diff-l13">—</td>
+                    <td class="wt-unit">V</td>
+                    <td class="wt-ideal" id="wye-ideal-l13"></td>
+                  </tr>
+                  <tr>
+                    <td class="wt-label"><span class="wye-dot wye-dot--l23"></span>L2–L3</td>
+                    <td class="wt-val mono" id="wye-diff-l23">—</td>
+                    <td class="wt-unit">V</td>
+                    <td class="wt-ideal" id="wye-ideal-l23"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="wye-stats-group">
+              <div class="wye-stats-header">Neutral offset</div>
+              <table class="wye-table">
+                <tbody>
+                  <tr>
+                    <td class="wt-label">Magnitude</td>
+                    <td class="wt-val mono" id="wye-neutral-mag">—</td>
+                    <td class="wt-unit">V</td>
+                  </tr>
+                  <tr>
+                    <td class="wt-label">Angle</td>
+                    <td class="wt-val mono" id="wye-neutral-ang">—</td>
+                    <td class="wt-unit">°</td>
+                  </tr>
+                  <tr>
+                    <td class="wt-label">Imbalance</td>
+                    <td class="wt-val mono" id="wye-imbalance">—</td>
+                    <td class="wt-unit">%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div><!-- /.wye-stats -->
+
+        </div><!-- /.wye-layout -->
+      </div><!-- /.chart-card -->
+    </section>
+
   </main>
 
   <footer class="footer"></footer>

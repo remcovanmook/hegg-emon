@@ -835,3 +835,150 @@ html, body {
   color: var(--text);
   border-color: var(--accent-blue);
 }
+
+/* ── 3-phase wye phasor diagram ── */
+
+/*
+ * Colours for the six line-to-line differential vectors.
+ * Using CSS custom properties so they inherit theme awareness automatically.
+ */
+:root {
+  --wye-l12: #a78bfa;   /* violet */
+  --wye-l13: #34d399;   /* emerald */
+  --wye-l23: #fbbf24;   /* amber */
+  --wye-neutral: #f43f5e; /* rose — neutral offset indicator */
+}
+
+/** Outer card layout: diagram left, stats right. */
+.wye-card {
+  padding: 20px;
+}
+
+.wye-layout {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+/** Square canvas container; canvas fills it 1:1. */
+.wye-diagram-wrap {
+  width: 380px;
+  height: 380px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+#wye-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/** Stats column: three groups stacked vertically. */
+.wye-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-self: center;
+}
+
+.wye-stats-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wye-stats-header {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/** Stat table inside each group. */
+.wye-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.wye-table td {
+  padding: 3px 8px 3px 0;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/** Phase/line label column. */
+.wt-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+}
+
+/** Numeric value column. */
+.wt-val {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.0rem;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+  min-width: 64px;
+}
+
+/** Unit column. */
+.wt-unit {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding-left: 4px;
+}
+
+/**
+ * Ideal/delta annotation column (shown for line differentials).
+ * Positive delta = above ideal (√3 * mean); negative = below.
+ */
+.wt-ideal {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  padding-left: 8px;
+  min-width: 72px;
+}
+
+.wt-ideal--pos { color: var(--accent-green); }
+.wt-ideal--neg { color: var(--accent-red); }
+
+/** Small coloured dot used as a legend swatch in stat rows. */
+.wye-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wye-dot--l1  { background: var(--phase-l1); }
+.wye-dot--l2  { background: var(--phase-l2); }
+.wye-dot--l3  { background: var(--phase-l3); }
+.wye-dot--l12 { background: var(--wye-l12); }
+.wye-dot--l13 { background: var(--wye-l13); }
+.wye-dot--l23 { background: var(--wye-l23); }
+
+/** Responsive: collapse to single column on narrow viewports. */
+@media (max-width: 860px) {
+  .wye-layout {
+    grid-template-columns: 1fr;
+  }
+  .wye-diagram-wrap {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+}

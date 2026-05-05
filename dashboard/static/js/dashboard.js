@@ -386,6 +386,9 @@ function initCharts() {
     }));
   });
 
+  // Wye phasor diagram — pure Canvas 2D, independent of Chart.js.
+  initWyeDiagram();
+
   // Inline current sparklines.
   ["chart-c-l1", "chart-c-l2", "chart-c-l3"].forEach((id, i) => {
     currentCharts.push(new Chart(document.getElementById(id), {
@@ -658,6 +661,13 @@ function applyReading(r) {
   setValue(el.currentL2, fmt1(r.current_l2));
   setValue(el.currentL3, fmt1(r.current_l3));
 
+  // Update the wye phasor diagram with the raw (un-smoothed) voltages.
+  updateWyeDiagram(
+    r.voltage_l1 ?? 0,
+    r.voltage_l2 ?? 0,
+    r.voltage_l3 ?? 0,
+  );
+
   appendToCharts(r);
 }
 
@@ -915,4 +925,377 @@ function updateVoltageAnnotation(phaseIndex) {
       },
     },
   };
+}
+
+/* ── 3-phase wye phasor diagram ─────────────────────────────────────────── */
+
+/**
+ * Compute the magnitude of the line-to-line voltage between two phases,
+ * assuming the two phasors are separated by 120° in the ideal wye arrangement.
+ *
+ * Uses the cosine rule:
+ *   |Va - Vb|² = Va² + Vb² - 2·Va·Vb·cos(120°)
+ *              = Va² + Vb² + Va·Vb          (since cos 120° = -0.5)
+ *
+ * @param {number} va - Phase-to-neutral magnitude of the first phase (V).
+ * @param {number} vb - Phase-to-neutral magnitude of the second phase (V).
+ * @returns {number} Line voltage magnitude in volts.
+ */
+function lineVoltage(va, vb) {
+  return Math.sqrt(va * va + vb * vb + va * vb);
+}
+
+/**
+ * Compute the complex neutral shift relative to the system ground.
+ *
+ * With a wye system where the three phase voltages have magnitudes V1, V2, V3
+ * and nominal 120° spacing, the neutral point is the centroid of the three
+ * phasor tips in the complex plane.  In a balanced system this is zero.
+ *
+ * Angles: L1 = 0°, L2 = -120°, L3 = +120°  (standard rotation convention).
+ *
+ * @param {number} v1 - L1 magnitude.
+ * @param {number} v2 - L2 magnitude.
+ * @param {number} v3 - L3 magnitude.
+ * @returns {{ re: number, im: number }} Real and imaginary parts of neutral shift.
+ */
+function neutralShift(v1, v2, v3) {
+  const deg120 = (2 * Math.PI) / 3;
+  const re = (v1 + v2 * Math.cos(-deg120) + v3 * Math.cos(deg120)) / 3;
+  const im = (v2 * Math.sin(-deg120) + v3 * Math.sin(deg120)) / 3;
+  return { re, im };
+}
+
+/**
+ * Compute per-phase imbalance as a percentage of the mean phase voltage.
+ * Uses the standard NEMA definition: 100 × maxDeviation / mean.
+ *
+ * @param {number} v1
+ * @param {number} v2
+ * @param {number} v3
+ * @returns {number} Voltage imbalance factor (%).
+ */
+function voltageImbalance(v1, v2, v3) {
+  const mean = (v1 + v2 + v3) / 3;
+  if (mean === 0) return 0;
+  const maxDev = Math.max(Math.abs(v1 - mean), Math.abs(v2 - mean), Math.abs(v3 - mean));
+  return (maxDev / mean) * 100;
+}
+
+/** @type {HTMLCanvasElement|null} */
+let wyeCanvas = null;
+
+/** @type {CanvasRenderingContext2D|null} */
+let wyeCtx = null;
+
+/**
+ * Initialise the wye canvas element.
+ * Sets the pixel buffer to twice the CSS size for crisp HiDPI rendering.
+ * Called once after DOMContentLoaded (inside initCharts).
+ */
+function initWyeDiagram() {
+  wyeCanvas = document.getElementById("wye-canvas");
+  if (!wyeCanvas) return;
+  wyeCtx = wyeCanvas.getContext("2d");
+  resizeWyeCanvas();
+  window.addEventListener("resize", resizeWyeCanvas);
+}
+
+/**
+ * Resize the canvas pixel buffer to match the CSS layout dimensions.
+ * The device pixel ratio is applied so lines stay sharp on Retina screens.
+ */
+function resizeWyeCanvas() {
+  if (!wyeCanvas) return;
+  const dpr  = window.devicePixelRatio || 1;
+  const rect = wyeCanvas.getBoundingClientRect();
+  wyeCanvas.width  = rect.width  * dpr;
+  wyeCanvas.height = rect.height * dpr;
+  wyeCtx.scale(dpr, dpr);
+}
+
+/**
+ * Draw the complete 3-phase wye phasor diagram onto the canvas.
+ *
+ * Layout:
+ *   - Origin at canvas centre; Y axis flipped (positive = up, electrical convention).
+ *   - Phase vectors radiate from origin at 0°, +120°, -120° (L1, L2, L3).
+ *   - Ideal balanced reference ring drawn as dashed circle at mean voltage radius.
+ *   - Line-to-line (LL) differential arcs drawn between phase tips.
+ *   - Neutral offset vector drawn from origin to centroid of phasor tips.
+ *   - Labels on each vector tip and the neutral point.
+ *
+ * @param {number} v1 - L1 RMS voltage.
+ * @param {number} v2 - L2 RMS voltage.
+ * @param {number} v3 - L3 RMS voltage.
+ */
+function drawWyeDiagram(v1, v2, v3) {
+  if (!wyeCtx || !wyeCanvas) return;
+
+  const dpr  = window.devicePixelRatio || 1;
+  const W    = wyeCanvas.width  / dpr;
+  const H    = wyeCanvas.height / dpr;
+  const cx   = W / 2;
+  const cy   = H / 2;
+
+  // Scale so the largest phase vector occupies 80 % of the half-dimension.
+  const maxV  = Math.max(v1, v2, v3, 1);
+  const scale = (Math.min(W, H) * 0.40) / maxV;
+
+  // Pull CSS custom-property colours for theme consistency.
+  const css   = getComputedStyle(document.documentElement);
+  const cprop = name => css.getPropertyValue(name).trim();
+
+  const cl1      = cprop("--phase-l1");
+  const cl2      = cprop("--phase-l2");
+  const cl3      = cprop("--phase-l3");
+  const cl12     = cprop("--wye-l12");
+  const cl13     = cprop("--wye-l13");
+  const cl23     = cprop("--wye-l23");
+  const cNeutral = cprop("--wye-neutral");
+  const cGrid    = cprop("--chart-grid");
+  const cText    = cprop("--text-muted");
+  const cTextDim = cprop("--text-dim");
+
+  const ctx = wyeCtx;
+  ctx.clearRect(0, 0, W, H);
+
+  // Helper: electrical angle → canvas (x,y).
+  // 0° is to the right; positive angle is counter-clockwise (standard maths).
+  const toXY = (mag, angleDeg) => {
+    const rad = angleDeg * Math.PI / 180;
+    return {
+      x: cx + mag * scale * Math.cos(rad),
+      y: cy - mag * scale * Math.sin(rad),   // flip Y
+    };
+  };
+
+  // Phasor tip coordinates (L1=0°, L2=-120°, L3=+120°).
+  const p1 = toXY(v1,    0);
+  const p2 = toXY(v2, -120);
+  const p3 = toXY(v3,  120);
+
+  const meanV   = (v1 + v2 + v3) / 3;
+  const idealR  = meanV * scale;
+
+  // ── Background grid rings (25 %, 50 %, 75 %, 100 % of ideal) ──
+  for (let frac = 0.25; frac <= 1.01; frac += 0.25) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, idealR * frac, 0, 2 * Math.PI);
+    ctx.strokeStyle = cGrid;
+    ctx.lineWidth   = 1;
+    ctx.setLineDash([]);
+    ctx.stroke();
+  }
+
+  // Spokes at 0°, 60°, 120°… (every 60°) as orientation guides.
+  for (let a = 0; a < 360; a += 60) {
+    const sp = toXY(maxV * 1.05, a);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(sp.x, sp.y);
+    ctx.strokeStyle = cGrid;
+    ctx.lineWidth   = 0.5;
+    ctx.stroke();
+  }
+
+  // ── IEC 61000-3-3 / EN 50160 reference rings ──
+  // Nominal LV supply voltage in Europe: 230 V ±10 % (207 V – 253 V).
+  // These rings are drawn at fixed voltages regardless of the measured mean,
+  // so they provide a stable absolute reference on the diagram.
+  const IEC_NOM   = 230;
+  const IEC_LOW   = 207;   // 230 V − 10 %
+  const IEC_HIGH  = 253;   // 230 V + 10 %
+
+  const drawIecRing = (voltage, color, dash, label, labelAngle) => {
+    const r = voltage * scale;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1;
+    ctx.setLineDash(dash);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Small label just outside the ring at the specified angle.
+    const lx = cx + (r + 5) * Math.cos(labelAngle);
+    const ly = cy - (r + 5) * Math.sin(labelAngle);
+    ctx.font      = "9px 'JetBrains Mono', monospace";
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(label, lx, ly);
+  };
+
+  // Tolerance bands first (underneath nominal ring).
+  drawIecRing(IEC_LOW,  "rgba(251,146,60,0.55)",  [3, 3], "−10 %",  Math.PI * 0.25);
+  drawIecRing(IEC_HIGH, "rgba(251,146,60,0.55)",  [3, 3], "+10 %",  Math.PI * 0.25);
+  // Nominal ring.
+  drawIecRing(IEC_NOM,  "rgba(255,255,255,0.30)", [5, 3], "230 V",  Math.PI * 0.20);
+
+  // ── Mean-voltage reference ring (dashed, dim) ──
+  ctx.beginPath();
+  ctx.arc(cx, cy, idealR, 0, 2 * Math.PI);
+  ctx.strokeStyle = cTextDim;
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ── Line-to-line differential chords (LL arcs drawn as straight chords) ──
+  // Drawn before the phase vectors so they appear underneath.
+  const drawChord = (pa, pb, color, label, labelOffset) => {
+    ctx.beginPath();
+    ctx.moveTo(pa.x, pa.y);
+    ctx.lineTo(pb.x, pb.y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash([6, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Midpoint label.
+    const mx = (pa.x + pb.x) / 2 + labelOffset.x;
+    const my = (pa.y + pb.y) / 2 + labelOffset.y;
+    ctx.font      = "bold 9px 'JetBrains Mono', monospace";
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(label, mx, my);
+  };
+
+  const llMag12 = lineVoltage(v1, v2);
+  const llMag13 = lineVoltage(v1, v3);
+  const llMag23 = lineVoltage(v2, v3);
+
+  drawChord(p1, p2, cl12, `L1–L2 ${llMag12.toFixed(1)} V`, { x: 14, y: -6 });
+  drawChord(p1, p3, cl13, `L1–L3 ${llMag13.toFixed(1)} V`, { x: -14, y: -6 });
+  drawChord(p2, p3, cl23, `L2–L3 ${llMag23.toFixed(1)} V`, { x: 0, y: 14 });
+
+  // ── Phase voltage vectors ──
+  const drawVector = (p, color, label, mag) => {
+    // Arrow shaft.
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(p.x, p.y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 2.5;
+    ctx.stroke();
+
+    // Arrowhead.
+    const angle = Math.atan2(cy - p.y, p.x - cx);
+    const hs    = 8;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x - hs * Math.cos(angle - 0.35), p.y + hs * Math.sin(angle - 0.35));
+    ctx.lineTo(p.x - hs * Math.cos(angle + 0.35), p.y + hs * Math.sin(angle + 0.35));
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Tip dot.
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Label at tip: push outward a bit.
+    const offX = (p.x - cx) * 0.18;
+    const offY = (p.y - cy) * 0.18;
+    ctx.font      = "bold 11px 'Inter', sans-serif";
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(`${label} ${mag.toFixed(1)} V`, p.x + offX, p.y + offY);
+  };
+
+  drawVector(p1, cl1, "L1", v1);
+  drawVector(p2, cl2, "L2", v2);
+  drawVector(p3, cl3, "L3", v3);
+
+  // ── Neutral offset vector ──
+  const ns  = neutralShift(v1, v2, v3);
+  const npx = cx + ns.re * scale;
+  const npy = cy - ns.im * scale;
+
+  // Only draw if the offset is visible (> 0.5 px).
+  const nLen = Math.sqrt((npx - cx) ** 2 + (npy - cy) ** 2);
+  if (nLen > 0.5) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(npx, npy);
+    ctx.strokeStyle  = cNeutral;
+    ctx.lineWidth    = 2;
+    ctx.setLineDash([3, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    ctx.arc(npx, npy, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = cNeutral;
+    ctx.fill();
+  }
+
+  // ── Origin dot ──
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
+  ctx.fillStyle = cText;
+  ctx.fill();
+
+  // ── Centre label (mean voltage) ──
+  ctx.font      = "10px 'JetBrains Mono', monospace";
+  ctx.fillStyle = cText;
+  ctx.textAlign = "center";
+  ctx.fillText(`mean ${meanV.toFixed(1)} V`, cx, cy - 10);
+}
+
+/**
+ * Update the wye diagram DOM stat elements and redraw the canvas.
+ *
+ * Called from applyReading() on every live SSE tick.
+ *
+ * @param {number} v1 - L1 RMS voltage.
+ * @param {number} v2 - L2 RMS voltage.
+ * @param {number} v3 - L3 RMS voltage.
+ */
+function updateWyeDiagram(v1, v2, v3) {
+  if (!v1 || !v2 || !v3) return;
+
+  // Phase voltage DOM.
+  setText("wye-v-l1", v1.toFixed(1));
+  setText("wye-v-l2", v2.toFixed(1));
+  setText("wye-v-l3", v3.toFixed(1));
+
+  // Line differentials.
+  const mean   = (v1 + v2 + v3) / 3;
+  const ideal  = mean * Math.sqrt(3);          // ideal LL for a balanced system
+  const ll12   = lineVoltage(v1, v2);
+  const ll13   = lineVoltage(v1, v3);
+  const ll23   = lineVoltage(v2, v3);
+
+  setText("wye-diff-l12", ll12.toFixed(1));
+  setText("wye-diff-l13", ll13.toFixed(1));
+  setText("wye-diff-l23", ll23.toFixed(1));
+
+  // Delta from ideal for each LL pair.
+  const setIdeal = (id, actual) => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    const delta = actual - ideal;
+    const sign  = delta >= 0 ? "+" : "";
+    e.textContent = `${sign}${delta.toFixed(1)} V vs ideal`;
+    e.className   = `wt-ideal ${delta >= 0 ? "wt-ideal--pos" : "wt-ideal--neg"}`;
+  };
+  setIdeal("wye-ideal-l12", ll12);
+  setIdeal("wye-ideal-l13", ll13);
+  setIdeal("wye-ideal-l23", ll23);
+
+  // Neutral offset.
+  const ns    = neutralShift(v1, v2, v3);
+  const nMag  = Math.sqrt(ns.re ** 2 + ns.im ** 2);
+  const nAng  = (Math.atan2(ns.im, ns.re) * 180 / Math.PI).toFixed(1);
+  const imbal = voltageImbalance(v1, v2, v3);
+  setText("wye-neutral-mag", nMag.toFixed(2));
+  setText("wye-neutral-ang", nAng);
+  setText("wye-imbalance",   imbal.toFixed(2));
+
+  // Canvas render.
+  drawWyeDiagram(v1, v2, v3);
 }
