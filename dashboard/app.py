@@ -64,14 +64,6 @@ _store: Optional[HeggStore] = None
 #: Source port the Hegg device broadcasts from.
 _DEVICE_SOURCE_PORT: int = 16120
 
-#: Fields present in every standard 1-second reading packet.
-_KNOWN_FIELDS = {
-    "timestamp", "serial",
-    "power_delivered", "power_returned",
-    "voltage_l1", "voltage_l2", "voltage_l3",
-    "current_l1", "current_l2", "current_l3",
-}
-
 
 def _push_reading(reading: HeggReading) -> None:
     """Persist a reading and record it as the latest.

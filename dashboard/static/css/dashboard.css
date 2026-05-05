@@ -225,16 +225,6 @@ html, body {
   color: var(--text-muted);
 }
 
-.summary-delta {
-  font-size: 0.72rem;
-  font-weight: 600;
-  font-family: "JetBrains Mono", monospace;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-.summary-delta--pos { color: var(--delivered-color); }
-.summary-delta--neg { color: var(--returned-color); }
 
 /* ── Header clock ── */
 .header-time {
@@ -669,16 +659,6 @@ html, body {
   margin-top: auto;
 }
 
-.footer-inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  font-family: "JetBrains Mono", monospace;
-}
 
 /* ── Flash animation for value updates ── */
 @keyframes value-flash {

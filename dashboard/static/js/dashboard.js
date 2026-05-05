@@ -441,20 +441,6 @@ function setEnergyDelta(id, value, period, unit) {
   e.className   = `energy-delta ${value >= 0 ? "energy-delta--pos" : "energy-delta--neg"}`;
 }
 
-/**
- * @param {string} id
- * @param {number} value
- * @param {string} period
- * @param {string} unit
- */
-function setDelta(id, value, period, unit) {
-  const e = document.getElementById(id);
-  if (!e) return;
-  const sign = value >= 0 ? "+" : "";
-  e.textContent = `${sign}${value.toFixed(3)} ${unit} / ${period}`;
-  e.className   = `summary-delta ${value >= 0 ? "summary-delta--pos" : "summary-delta--neg"}`;
-}
-
 /* ── SSE ────────────────────────────────────────────────────────────────── */
 
 let eventSource = null;
