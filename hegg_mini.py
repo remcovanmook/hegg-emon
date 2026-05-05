@@ -176,18 +176,26 @@ def _handle_packet(payload: dict, src_ip: str) -> None:
 
     Minute-summary packets (identified by the presence of
     ``energy_delivered_tariff1``) are stored in ``_latest_summary``.
-    All other packets are treated as 1-second readings: stored in
-    ``_latest_reading`` and broadcast to every connected SSE client.
+    All other packets are treated as 1-second readings.
+
+    If the source IP differs from the previously seen device, all cached
+    state is cleared so stale data from the old device does not linger.
 
     Args:
         payload: Decoded JSON dict from the device.
-        src_ip:  Source IP address (used only for debug logging).
+        src_ip:  Source IP address of this packet.
     """
     global _latest_reading, _latest_summary, _device_ip
 
+    if src_ip != _device_ip and _device_ip:
+        logger.info("Device IP changed %s -> %s — clearing cached state", _device_ip, src_ip)
+        _latest_reading = None
+        _latest_summary = {}
+
+    _device_ip = src_ip
+
     if "energy_delivered_tariff1" in payload:
         _latest_summary = _normalise_summary(payload)
-        _device_ip = src_ip
         logger.debug("Summary packet received from %s", src_ip)
     else:
         _latest_reading = payload
@@ -197,21 +205,24 @@ def _handle_packet(payload: dict, src_ip: str) -> None:
 def udp_listener(udp_port: int, device_ip: str = "") -> None:
     """Receive Hegg UDP broadcasts and update shared state.
 
-    Runs indefinitely in a daemon thread.  Distinguishes between
-    1-second reading packets and minute-summary packets by delegating
-    to :func:`_handle_packet`.
+    Accepts packets from any source on the broadcast port.  If ``device_ip``
+    is supplied (via ``--device-ip``), only packets from that address are
+    processed; all others are silently dropped.
+
+    Unlike the full collector, this listener does not lock onto the first
+    seen device.  If the source IP changes (e.g. the laptop moves networks
+    or a different device starts broadcasting), cached state is cleared via
+    :func:`_handle_packet` so stale readings do not persist.
 
     Args:
         udp_port:  Destination port to bind.
-        device_ip: If non-empty, drop packets from any other source IP.
+        device_ip: If non-empty, accept only packets from this source IP.
     """
     sock = _open_udp_socket(udp_port)
     sock.settimeout(1.0)
     logger.info("UDP listener bound to 0.0.0.0:%d", udp_port)
-
-    locked_ip = device_ip
     if device_ip:
-        logger.info("Locked to device IP %s", device_ip)
+        logger.info("Filtering to device IP %s", device_ip)
 
     while True:
         try:
@@ -227,12 +238,9 @@ def udp_listener(udp_port: int, device_ip: str = "") -> None:
         if src_port != _DEVICE_SOURCE_PORT:
             continue
 
-        if locked_ip:
-            if src_ip != locked_ip:
-                continue
-        else:
-            locked_ip = src_ip
-            logger.info("Locked onto Hegg device at %s", src_ip)
+        # Honour an explicit --device-ip filter; otherwise accept any source.
+        if device_ip and src_ip != device_ip:
+            continue
 
         try:
             payload = json.loads(data.decode("utf-8"))
