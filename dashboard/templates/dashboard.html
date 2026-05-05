@@ -233,63 +233,66 @@
             <canvas id="wye-canvas" aria-label="Wye phasor diagram"></canvas>
           </div>
 
-          <!-- Stat table -->
+          <!-- Stat tables + neutral offset mini canvas -->
           <div class="wye-stats">
-            <div class="wye-stats-group">
-              <div class="wye-stats-header">Phase voltages</div>
-              <table class="wye-table" id="wye-phase-table">
-                <tbody>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l1"></span>L1</td>
-                    <td class="wt-val mono" id="wye-v-l1">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l1"></td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l2"></span>L2</td>
-                    <td class="wt-val mono" id="wye-v-l2">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l2"></td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l3"></span>L3</td>
-                    <td class="wt-val mono" id="wye-v-l3">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l3"></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
 
-            <div class="wye-stats-group">
-              <div class="wye-stats-header">Line differentials</div>
-              <table class="wye-table">
-                <tbody>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l12"></span>L1–L2</td>
-                    <td class="wt-val mono" id="wye-diff-l12">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l12"></td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l13"></span>L1–L3</td>
-                    <td class="wt-val mono" id="wye-diff-l13">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l13"></td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l23"></span>L2–L3</td>
-                    <td class="wt-val mono" id="wye-diff-l23">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l23"></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <!-- Left column: all three stat groups stacked with identical table widths -->
+            <div class="wye-stats-groups">
 
-            <div class="wye-stats-group">
-              <div class="wye-stats-header">Neutral offset</div>
-              <div class="wye-neutral-layout">
+              <div class="wye-stats-group">
+                <div class="wye-stats-header">Phase voltages</div>
+                <table class="wye-table" id="wye-phase-table">
+                  <tbody>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l1"></span>L1</td>
+                      <td class="wt-val mono" id="wye-v-l1">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l1"></td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l2"></span>L2</td>
+                      <td class="wt-val mono" id="wye-v-l2">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l2"></td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l3"></span>L3</td>
+                      <td class="wt-val mono" id="wye-v-l3">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l3"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="wye-stats-group">
+                <div class="wye-stats-header">Line differentials</div>
+                <table class="wye-table">
+                  <tbody>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l12"></span>L1–L2</td>
+                      <td class="wt-val mono" id="wye-diff-l12">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l12"></td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l13"></span>L1–L3</td>
+                      <td class="wt-val mono" id="wye-diff-l13">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l13"></td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l23"></span>L2–L3</td>
+                      <td class="wt-val mono" id="wye-diff-l23">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l23"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="wye-stats-group">
+                <div class="wye-stats-header">Neutral offset</div>
                 <table class="wye-table">
                   <tbody>
                     <tr>
@@ -309,11 +312,17 @@
                     </tr>
                   </tbody>
                 </table>
-                <div class="wye-neutral-mini-wrap">
-                  <canvas id="wye-neutral-canvas" aria-label="Neutral offset polar diagram"></canvas>
-                </div>
               </div>
+
+            </div><!-- /.wye-stats-groups -->
+
+            <!-- Right column: mini polar canvas anchored to the bottom of the
+                 flex column so it sits visually beside the Neutral offset group. -->
+            <div class="wye-neutral-mini-wrap">
+              <canvas id="wye-neutral-canvas" aria-label="Neutral offset polar diagram"></canvas>
             </div>
+
+          </div><!-- /.wye-stats -->
           </div><!-- /.wye-stats -->
 
         </div><!-- /.wye-layout -->

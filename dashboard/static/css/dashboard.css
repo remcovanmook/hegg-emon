@@ -875,14 +875,28 @@ html, body {
   display: block;
 }
 
-/** Stats column: three groups stacked vertically. */
+/** Stat panel: flex row — groups column left, mini canvas right. */
 .wye-stats {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;   /* canvas floats to the bottom, beside neutral group */
+  gap: 20px;
+  padding: 20px;
+}
+
+/**
+ * Left column of .wye-stats: stacks the three stat groups vertically.
+ * flex: 1 lets it fill the available space; min-width: 0 prevents overflow.
+ */
+.wye-stats-groups {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  align-self: center;
+  flex: 1;
+  min-width: 0;
 }
 
+/** Each thematic group within .wye-stats-groups. */
 .wye-stats-group {
   display: flex;
   flex-direction: column;
@@ -978,28 +992,7 @@ html, body {
 .wye-dot--l13 { background: var(--wye-l13); }
 .wye-dot--l23 { background: var(--wye-l23); }
 
-/**
- * Container for the mini neutral-offset polar diagram.
- * Width fills the stats group; aspect-ratio keeps it square.
- */
-
-/**
- * Flex row inside the Neutral offset group: stat table on the left,
- * mini polar canvas on the right.
- */
-.wye-neutral-layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  margin-top: 4px;
-}
-
-/** Table within the neutral layout: fixed-width, don't grow. */
-.wye-neutral-layout .wye-table {
-  flex: 0 0 auto;
-}
-
-/** Mini polar canvas: square, fixed size, does not shrink. */
+/** Mini polar canvas: fixed 140 × 140 px square, does not grow or shrink. */
 .wye-neutral-mini-wrap {
   flex: 0 0 140px;
   width: 140px;
