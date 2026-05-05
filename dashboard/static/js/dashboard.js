@@ -139,6 +139,13 @@ let lastWasExporting = null;
 let flipCount = 0;
 let selectedHours = 24;
 
+/**
+ * Flip annotation configs keyed by ID, mirrored across all charts.
+ * Kept here so updateVoltageAnnotation can merge them with vMin/vMax.
+ * @type {Object.<string, object>}
+ */
+const flipAnnotations = {};
+
 /* ── DOM ────────────────────────────────────────────────────────────────── */
 
 let el;
@@ -284,8 +291,11 @@ async function loadHistory(hours) {
   voltageExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
   currentExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
   lastWasExporting = null;
-  powerChart.options.plugins.annotation.annotations = {};
   flipCount = 0;
+  Object.keys(flipAnnotations).forEach(k => delete flipAnnotations[k]);
+  powerChart.options.plugins.annotation.annotations = {};
+  voltageCharts.forEach(c => { c.options.plugins.annotation.annotations = {}; });
+  currentCharts.forEach(c => { c.options.plugins.annotation.annotations = {}; });
 
   powerChart.data.datasets[0].data = toXY(data, r =>
     Math.round((r.power_delivered - r.power_returned) * 1000)
@@ -603,10 +613,17 @@ function updateInlineScale(chart, extremes, minPad) {
 
 /* ── Annotations ────────────────────────────────────────────────────────── */
 
+/**
+ * Add a vertical flip marker at the given timestamp on ALL charts.
+ * The annotation is stored in flipAnnotations so voltage charts can
+ * merge it with their own min/max lines.
+ * @param {number}  tsMs     - Timestamp in milliseconds.
+ * @param {boolean} toExport - Direction after the flip.
+ */
 function addFlipAnnotation(tsMs, toExport) {
   const id    = `flip_${flipCount++}`;
   const color = toExport ? "rgba(34,197,94,0.55)" : "rgba(59,130,246,0.55)";
-  powerChart.options.plugins.annotation.annotations[id] = {
+  const annotation = {
     type: "line", scaleID: "x", value: tsMs,
     borderColor: color, borderWidth: 1, borderDash: [4, 4],
     label: {
@@ -618,17 +635,24 @@ function addFlipAnnotation(tsMs, toExport) {
       padding: { x: 4, y: 2 }, rotation: -90,
     },
   };
+  flipAnnotations[id] = annotation;
+  powerChart.options.plugins.annotation.annotations[id] = annotation;
+  voltageCharts.forEach(c => { c.options.plugins.annotation.annotations[id] = annotation; });
+  currentCharts.forEach(c => { c.options.plugins.annotation.annotations[id] = annotation; });
 }
 
 /**
  * Rebuild horizontal min/max annotation lines for a voltage phase chart.
+ * Merges with any existing flip annotations so they are not lost.
  * @param {number} phaseIndex
  */
 function updateVoltageAnnotation(phaseIndex) {
   const { min, max } = voltageExtremes[phaseIndex];
   if (!isFinite(min) || !isFinite(max)) return;
   const chart = voltageCharts[phaseIndex];
+  // Merge flip markers with the min/max lines rather than replacing everything.
   chart.options.plugins.annotation.annotations = {
+    ...flipAnnotations,
     vMin: {
       type: "line", scaleID: "y", value: min,
       borderColor: "rgba(239,68,68,0.7)", borderWidth: 1, borderDash: [4, 3],
