@@ -16,7 +16,7 @@ metrics and optional Home Assistant integration.
 ## Install
 
 ```bash
-git clone https://github.com/yourorg/hegg /opt/hegg
+git clone https://github.com/YOUR_USERNAME/hegg /opt/hegg
 cd /opt/hegg
 python3 -m venv .venv
 source .venv/bin/activate
@@ -45,7 +45,7 @@ Edit `/etc/default/hegg` to set `HEGG_DB` and optionally `HEGG_DEVICE_IP`
 ### Development / single command
 
 ```bash
-python hegg_server.py --device-ip 172.28.2.158
+python hegg_server.py --device-ip 192.168.1.42
 open http://localhost:8080
 ```
 
@@ -85,7 +85,7 @@ sudo service hegg start
 
 ## Configuration
 
-Set in `/etc/hegg/hegg.conf` (for service deployments) or as CLI flags:
+Set in `/etc/default/hegg` (for service deployments) or as CLI flags:
 
 | Variable / Flag | Default | Description |
 |---|---|---|
@@ -129,7 +129,7 @@ Grafana: add `http://<host>:9101` as a Prometheus data source.
 ## Home Assistant / MQTT
 
 Requires `aiomqtt` (`pip install aiomqtt`). Enable via `HEGG_MQTT_HOST` in
-`/etc/hegg/hegg.conf`, or pass `--mqtt-host` directly:
+`/etc/default/hegg`, or pass `--mqtt-host` directly:
 
 ```bash
 python hegg_mqtt.py --mqtt-host 192.168.1.10 --db /var/lib/hegg/hegg.db

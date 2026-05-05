@@ -1,6 +1,6 @@
 [Unit]
 Description=Hegg energy monitor — UDP collector
-Documentation=https://github.com/yourorg/hegg
+Documentation=https://github.com/YOUR_USERNAME/hegg
 After=network-online.target
 Wants=network-online.target
 
