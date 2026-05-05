@@ -2,8 +2,8 @@
 hegg_server.py
 ==============
 
-Convenience launcher that runs the UDP collector and the Flask/Prometheus
-server in the same process.
+Convenience launcher that runs the UDP collector, Flask/Prometheus server,
+and optionally the MQTT/HA exporter in the same process.
 
 For single-host setups this is all you need.  For distributed setups, run
 each component separately:
@@ -122,6 +122,26 @@ def main() -> None:
             "prometheus_client not installed — Prometheus exporter disabled. "
             "Install with: pip install prometheus_client"
         )
+
+    # ── MQTT / Home Assistant exporter (optional) ────────────────────────────
+    if args.mqtt_host:
+        try:
+            from hegg.ha_publisher import MQTTConfig
+            from hegg_mqtt import run as run_mqtt
+            mqtt_config = MQTTConfig(
+                host=args.mqtt_host,
+                port=args.mqtt_port,
+                username=args.mqtt_user or None,
+                password=args.mqtt_pass or None,
+            )
+            threading.Thread(
+                target=lambda: asyncio.run(run_mqtt(config=mqtt_config, db_path=db_path)),
+                daemon=True,
+                name="hegg-mqtt",
+            ).start()
+            logger.info("MQTT exporter started (broker=%s:%d)", args.mqtt_host, args.mqtt_port)
+        except ImportError as exc:
+            logger.warning("MQTT integration disabled: %s", exc)
 
     # ── Flask dashboard: reads SQLite ─────────────────────────────────────────
     application = create_app(db_path=db_path)

@@ -4,11 +4,15 @@ hegg.ha_publisher
 
 Home Assistant integration via MQTT auto-discovery.
 
-This module publishes Hegg energy monitor readings to an MQTT broker so
-that Home Assistant can auto-discover them as sensor entities via its
+Publishes Hegg energy monitor readings to an MQTT broker so that Home
+Assistant can auto-discover them as sensor entities via its
 `MQTT discovery <https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery>`_
-mechanism.  No manual configuration in Home Assistant is required beyond
-having the MQTT integration enabled.
+mechanism.  No manual HA configuration is required beyond enabling the MQTT
+integration.
+
+This module contains the MQTT connection and publish logic only.  The polling
+loop that reads new readings from SQLite and calls :meth:`HAPublisher.handle`
+is in ``hegg_mqtt.py``.
 
 Entities created
 ----------------
@@ -21,31 +25,11 @@ Entity ID suffix                   Unit / class          Label
 =================================  ====================  ========
 power_delivered                    kW / power            Grid power in
 power_returned                     kW / power            Grid power out
-voltage_l1 / voltage_l2 / l3      V / voltage           Voltage L1–L3
-current_l1 / current_l2 / l3      A / current           Current L1–L3
+voltage_l1 / voltage_l2 / l3      V / voltage           Voltage L1–3
+current_l1 / current_l2 / l3      A / current           Current L1–3
 =================================  ====================  ========
 
-Configuration
--------------
-
-Pass an :class:`MQTTConfig` to :class:`HAPublisher`, then register
-:meth:`HAPublisher.handle` as a listener callback::
-
-    from hegg.ha_publisher import HAPublisher, MQTTConfig
-
-    cfg = MQTTConfig(host="192.168.1.10", username="mqtt", password="secret")
-    publisher = HAPublisher(cfg)
-    await publisher.connect()
-
-    listener = HeggListener()
-    listener.add_handler(publisher.handle)
-    asyncio.run(listener.run())
-
-Dependencies
-------------
-
-This module requires ``aiohttp`` for the async MQTT client.  The actual
-MQTT transport is handled by ``aiomqtt`` which must be installed alongside::
+Requires ``aiomqtt``::
 
     pip install aiomqtt
 """
@@ -221,8 +205,10 @@ class HAPublisher:
     async def handle(self, reading: HeggReading) -> None:
         """Publish a reading to MQTT.
 
-        Sends discovery config on the first call, then publishes the state
-        JSON to the per-device state topic on every call.
+        Sends HA discovery config on the first call, then publishes the full
+        reading as a JSON state blob to the per-device state topic.  Called
+        by the polling loop in ``hegg_mqtt.py`` for each new reading from
+        the store.
 
         Args:
             reading: Parsed reading from the Hegg device.

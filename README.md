@@ -91,7 +91,29 @@ Metrics at `http://localhost:9101/metrics`:
 
 ## Home Assistant / MQTT
 
-Not yet implemented.
+Requires `aiomqtt`:
+
+```bash
+pip install aiomqtt
+```
+
+Run as a separate process pointing at the same database:
+
+```bash
+python hegg_mqtt.py --mqtt-host 192.168.1.10 --db hegg.db
+# with auth:
+python hegg_mqtt.py --mqtt-host 192.168.1.10 --mqtt-user ha --mqtt-pass secret
+```
+
+Or include it in the all-in-one launcher:
+
+```bash
+python hegg_server.py --device-ip 172.28.2.158 --mqtt-host 192.168.1.10
+```
+
+Entities are auto-discovered in Home Assistant under device `hegg_<serial>`.
+State updates publish to `hegg/<serial>/state` as JSON; each sensor uses a
+`value_template` to extract its field (e.g. `{{ value_json.power_delivered }}`).
 
 ---
 
