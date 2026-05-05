@@ -296,8 +296,8 @@
                     <td class="wt-label">Magnitude</td>
                     <td class="wt-val" id="wye-neutral-mag">—</td>
                     <td class="wt-unit">V</td>
-                    <!-- Canvas spans all 3 rows, sitting in the same column as the ideal deltas above -->
-                    <td class="wt-ideal wt-canvas-cell" rowspan="3">
+                    <!-- Canvas spans 4 rows; the 4th empty row absorbs excess height -->
+                    <td class="wt-ideal wt-canvas-cell" rowspan="4">
                       <div class="wye-neutral-mini-wrap">
                         <canvas id="wye-neutral-canvas" aria-label="Neutral offset polar diagram"></canvas>
                       </div>
@@ -313,6 +313,7 @@
                     <td class="wt-val" id="wye-imbalance">—</td>
                     <td class="wt-unit">%</td>
                   </tr>
+                  <tr><!-- empty row absorbs canvas height --></tr>
                 </tbody>
               </table>
             </div>
