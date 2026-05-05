@@ -140,15 +140,12 @@
     <!-- ── Power ── -->
     <section class="section" aria-labelledby="power-heading">
       <h2 id="power-heading" class="section-title">Power</h2>
-      <div class="power-display" id="power-display">
-        <div class="power-direction" id="power-direction">—</div>
-        <div class="power-value-row">
+      <div class="chart-card" id="power-display">
+        <div class="power-card-header">
+          <span class="power-direction" id="power-direction">—</span>
           <span class="power-value mono" id="power-net-val">—</span>
           <span class="power-unit">W</span>
         </div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-label">Power over time</div>
         <div class="chart-wrapper"><canvas id="chart-power" aria-label="Net power history"></canvas></div>
       </div>
     </section>

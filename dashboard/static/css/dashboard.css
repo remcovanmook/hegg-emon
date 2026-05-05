@@ -422,20 +422,27 @@ html, body {
 .tariff-delta--pos { color: var(--delivered-color); opacity: 0.75; }
 .tariff-delta--neg { color: var(--returned-color);  opacity: 0.75; }
 
-/* ── Power import/export display ── */
-.power-display {
-  background: var(--surface);
-  border: 1px solid var(--border);
+/* ── Power card (display + chart merged) ── */
+
+/** The chart-card#power-display gets a coloured left border
+ *  via the --import / --export modifier classes set by JS. */
+.chart-card#power-display {
   border-left-width: 3px;
-  border-radius: var(--radius);
-  padding: 20px 28px;
-  margin-bottom: 16px;
-  box-shadow: var(--shadow);
+  border-left-style: solid;
+  border-left-color: var(--border);
   transition: border-color 0.3s;
 }
 
-.power-display--import { border-left-color: var(--delivered-color); }
-.power-display--export { border-left-color: var(--returned-color); }
+.chart-card#power-display.power-display--import { border-left-color: var(--delivered-color); }
+.chart-card#power-display.power-display--export { border-left-color: var(--returned-color); }
+
+/** Compact header row: direction label + large watt value inline. */
+.power-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
 
 .power-direction {
   font-size: 0.68rem;
@@ -443,21 +450,14 @@ html, body {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--text-muted);
-  margin-bottom: 6px;
   transition: color 0.3s;
 }
 
 .power-display--import .power-direction { color: var(--delivered-color); }
 .power-display--export .power-direction { color: var(--returned-color); }
 
-.power-value-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
 .power-value {
-  font-size: 3.2rem;
+  font-size: 2.4rem;
   font-weight: 700;
   font-family: "JetBrains Mono", monospace;
   letter-spacing: -0.04em;
@@ -470,7 +470,7 @@ html, body {
 .power-display--export .power-value { color: var(--returned-color); }
 
 .power-unit {
-  font-size: 1.1rem;
+  font-size: 1.0rem;
   color: var(--text-muted);
   font-weight: 500;
 }
