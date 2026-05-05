@@ -139,22 +139,39 @@ def _broadcast_reading(reading: dict) -> None:
                 pass  # slow client; handler will time out and clean up
 
 
+def _handle_packet(payload: dict, src_ip: str) -> None:
+    """Route a decoded UDP packet to the appropriate shared-state slot.
+
+    Minute-summary packets (identified by the presence of
+    ``energy_delivered_tariff1``) are stored in ``_latest_summary``.
+    All other packets are treated as 1-second readings: stored in
+    ``_latest_reading`` and broadcast to every connected SSE client.
+
+    Args:
+        payload: Decoded JSON dict from the device.
+        src_ip:  Source IP address (used only for debug logging).
+    """
+    global _latest_reading, _latest_summary
+
+    if "energy_delivered_tariff1" in payload:
+        _latest_summary = payload
+        logger.debug("Summary packet received from %s", src_ip)
+    else:
+        _latest_reading = payload
+        _broadcast_reading(payload)
+
+
 def udp_listener(udp_port: int, device_ip: str = "") -> None:
     """Receive Hegg UDP broadcasts and update shared state.
 
     Runs indefinitely in a daemon thread.  Distinguishes between
-    1-second reading packets and minute-summary packets by checking for
-    the ``energy_delivered_tariff1`` key.
-
-    Reading packets are pushed to every connected SSE client.
-    Summary packets are stored in ``_latest_summary``.
+    1-second reading packets and minute-summary packets by delegating
+    to :func:`_handle_packet`.
 
     Args:
         udp_port:  Destination port to bind.
         device_ip: If non-empty, drop packets from any other source IP.
     """
-    global _latest_reading, _latest_summary
-
     sock = _open_udp_socket(udp_port)
     sock.settimeout(1.0)
     logger.info("UDP listener bound to 0.0.0.0:%d", udp_port)
@@ -190,14 +207,7 @@ def udp_listener(udp_port: int, device_ip: str = "") -> None:
             logger.warning("Dropping undecodable packet from %s: %s", addr, exc)
             continue
 
-        if "energy_delivered_tariff1" in payload:
-            # Minute-summary packet.
-            _latest_summary = payload
-            logger.debug("Summary packet received from %s", src_ip)
-        else:
-            # 1-second reading packet.
-            _latest_reading = payload
-            _broadcast_reading(payload)
+        _handle_packet(payload, src_ip)
 
 # ---------------------------------------------------------------------------
 # HTTP request handler
@@ -383,7 +393,7 @@ class MiniHandler(BaseHTTPRequestHandler):
                     self.wfile.write(b": keep-alive\n\n")
                 self.wfile.flush()
 
-        except (BrokenPipeError, ConnectionResetError, OSError):
+        except OSError:
             pass  # client disconnected
         finally:
             with _sse_lock:

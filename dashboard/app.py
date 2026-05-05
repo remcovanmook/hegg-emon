@@ -63,7 +63,7 @@ _store: Optional[HeggStore] = None
 # ---------------------------------------------------------------------------
 
 @app.route("/", methods=["GET"])
-def index() -> str:
+def index() -> Response:
     """Render the main dashboard page."""
     return send_from_directory("static", "dashboard.html")
 
@@ -251,8 +251,10 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Hegg dashboard server")
     p.add_argument("--http-port", type=int, default=8080)
     p.add_argument("--db", default=default_db_path())
+    p.add_argument("--host",       default="0.0.0.0",
+                   help="Interface to bind (default: 0.0.0.0)")
     p.add_argument("--debug", action="store_true")
     args = p.parse_args()
     create_app(db_path=args.db)
-    app.run(host="0.0.0.0", port=args.http_port, debug=args.debug,  # nosec B104
+    app.run(host=args.host, port=args.http_port, debug=args.debug,
             use_reloader=False, threaded=True)
