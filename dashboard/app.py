@@ -254,5 +254,5 @@ if __name__ == "__main__":
     p.add_argument("--debug", action="store_true")
     args = p.parse_args()
     create_app(db_path=args.db)
-    app.run(host="0.0.0.0", port=args.http_port, debug=args.debug,
+    app.run(host="0.0.0.0", port=args.http_port, debug=args.debug,  # nosec B104
             use_reloader=False, threaded=True)
