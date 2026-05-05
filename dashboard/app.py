@@ -30,14 +30,15 @@ GET /api/history
 import asyncio
 import json
 import logging
+import socket
 import time
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Awaitable, Iterator, List, Optional
+from typing import Callable, Iterator, List, Optional
 
 from flask import Flask, Response, jsonify, render_template, request
 
-from hegg.listener import HeggListener, HeggReading
+from hegg.listener import HeggReading
 from hegg.store import HeggStore
 
 logger = logging.getLogger(__name__)
@@ -77,33 +78,72 @@ def _push_reading(reading: HeggReading) -> None:
             logger.exception("Store insert failed")
 
 
-async def _async_handler(reading: HeggReading) -> None:
-    """Async bridge from HeggListener to the thread-safe push function.
-
-    Args:
-        reading: Parsed reading from the Hegg device.
-    """
-    _push_reading(reading)
-
-
 def _run_listener(port: int, extra_handlers: List[Callable]) -> None:
-    """Run the async UDP listener in a dedicated background thread.
+    """Receive Hegg UDP broadcasts using a raw blocking socket.
+
+    Uses the same socket options as udp_test.py (SO_REUSEADDR, SO_BROADCAST,
+    SO_REUSEPORT) which are confirmed to work on this platform.  The asyncio
+    create_datagram_endpoint approach did not receive packets reliably on macOS.
+
+    Each unique device timestamp is processed once.  The Hegg device sends the
+    same reading 2-3 times per second; duplicates are dropped by comparing the
+    timestamp ms value against the previous stored value.
 
     Args:
         port:           UDP port to bind to.
-        extra_handlers: Additional async handler callables (e.g. Prometheus
-                        exporter) registered alongside the store writer.
+        extra_handlers: Additional async callables (e.g. Prometheus exporter);
+                        run in a dedicated per-thread event loop.
     """
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    listener = HeggListener(port=port)
-    listener.add_handler(_async_handler)
-    for handler in extra_handlers:
-        listener.add_handler(handler)
+    # Persistent event loop for running async extra handlers.
+    handler_loop: Optional[asyncio.AbstractEventLoop] = None
+    if extra_handlers:
+        handler_loop = asyncio.new_event_loop()
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     try:
-        loop.run_until_complete(listener.run())
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except AttributeError:
+        pass  # SO_REUSEPORT not available on all platforms
+    sock.bind(("0.0.0.0", port))
+    sock.settimeout(1.0)  # allows clean shutdown on process exit
+    logger.info("UDP socket bound to 0.0.0.0:%d", port)
+
+    last_ts_ms: int = 0
+
+    try:
+        while True:
+            try:
+                data, addr = sock.recvfrom(4096)
+            except socket.timeout:
+                continue
+
+            try:
+                payload = json.loads(data.decode("utf-8"))
+                reading = HeggReading.from_dict(payload)
+            except (json.JSONDecodeError, KeyError, ValueError) as exc:
+                logger.warning("Dropping malformed packet from %s: %s", addr, exc)
+                continue
+
+            # The device sends 2-3 identical packets per second; deduplicate.
+            ts_ms = int(reading.timestamp.timestamp() * 1000)
+            if ts_ms == last_ts_ms:
+                continue
+            last_ts_ms = ts_ms
+
+            _push_reading(reading)
+
+            if handler_loop:
+                for handler in extra_handlers:
+                    try:
+                        handler_loop.run_until_complete(handler(reading))
+                    except Exception:
+                        logger.exception("Extra handler error")
     finally:
-        loop.close()
+        sock.close()
+        if handler_loop:
+            handler_loop.close()
 
 
 def _prune_loop(store: HeggStore, interval_s: int = 3600) -> None:
