@@ -44,6 +44,7 @@ from hegg.store import HeggStore
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # ---------------------------------------------------------------------------
 # Shared state
