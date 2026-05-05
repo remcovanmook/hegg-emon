@@ -4,9 +4,14 @@ hegg_mini.py
 
 Self-contained Hegg energy monitor server.
 
+Intended to run on a laptop or desktop on the same local network as the Hegg
+device.  Start it, open a browser to ``http://localhost:8080``, and the
+dashboard is live — no installation, no database, no background services.
+
 Listens to UDP broadcasts from the Hegg device, serves live readings as an
 SSE stream on ``/stream``, and exposes a minimal subset of the same REST API
-that the full dashboard frontend expects.  No database, no Flask, no Jinja2.
+that the full dashboard frontend expects.  History and delta summaries are
+out of scope — the dashboard starts empty and fills in from the live stream.
 
 Dependencies: Python 3.7+ standard library only.
 

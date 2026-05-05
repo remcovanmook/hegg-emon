@@ -112,12 +112,15 @@ new readings from SQLite and publishes to MQTT is the missing piece.
 
 ### `hegg_mini.py`
 
-Self-contained minimal server.  Zero external dependencies — Python 3.7+
-standard library only.
+Single-file server intended to run on a laptop or desktop on the same local
+network as the Hegg device.  Start it, open a browser to `http://localhost:8080`,
+and the dashboard is live — no installation, no database, no background services.
 
-Designed for situations where the full stack (Flask, SQLite, Prometheus) is
-unwanted overhead.  Receives UDP broadcasts directly and fans them out to SSE
-clients in the same process — no database involved.
+Zero external dependencies — Python 3.7+ standard library only.
+
+Receives UDP broadcasts directly and fans them out to SSE clients in the same
+process.  History, delta summaries, and Prometheus metrics are out of scope;
+the dashboard starts empty and fills in from the live stream.
 
 **Data flow:**
 
