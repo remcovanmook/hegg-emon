@@ -139,18 +139,6 @@ Entities are auto-discovered in Home Assistant under device `hegg_<serial>`.
 
 ---
 
-## Diagnostics
-
-To verify the Hegg device is reachable before running the full stack:
-
-```bash
-python udp_test.py
-```
-
-Prints every UDP packet received on port 16121.
-
----
-
 ## Tests
 
 ```bash
@@ -194,6 +182,5 @@ tests/
   test_store.py
   test_prometheus_exporter.py
 
-udp_test.py             UDP reception diagnostic
 ARCHITECTURE.md         Component and data-flow reference
 ```
