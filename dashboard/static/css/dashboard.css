@@ -1107,5 +1107,7 @@ html, body {
   font-family: var(--font-mono, "JetBrains Mono", monospace);
 }
 
-.cost-net--positive { color: var(--accent-red);   }
-.cost-net--negative { color: var(--accent-green);  }
+.cost-import        { color: var(--delivered-color); }
+.cost-export        { color: var(--returned-color);   }
+.cost-net--positive { color: var(--accent-red);       }
+.cost-net--negative { color: var(--accent-green);     }
