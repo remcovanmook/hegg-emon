@@ -32,6 +32,7 @@
           <option value="72">3 d</option>
           <option value="168">7 d</option>
         </select>
+        <span class="header-time" id="header-time" aria-live="off">—</span>
         <div class="connection-status" id="connection-status" role="status" aria-live="polite">
           <span class="status-dot" id="status-dot"></span>
           <span class="status-label" id="status-label">Connecting…</span>
@@ -47,73 +48,81 @@
       <h1 id="summary-heading" class="sr-only">Summary</h1>
       <div class="summary-strip">
 
-        <!-- Energy In -->
-        <div class="summary-item">
-          <div class="summary-label">Energy In</div>
-          <div class="summary-value" id="energy-in-total">—</div>
-          <div class="summary-unit">kWh</div>
-          <span class="summary-delta" id="energy-in-total-delta"></span>
-          <div class="summary-tariffs">
-            <div class="summary-tariff">
-              <span class="tariff-label">T1</span>
-              <span class="tariff-value" id="energy-in-t1">—</span>
-              <span class="tariff-unit">kWh</span>
-              <span class="tariff-delta" id="energy-in-t1-delta"></span>
-            </div>
-            <div class="summary-tariff">
-              <span class="tariff-label">T2</span>
-              <span class="tariff-value" id="energy-in-t2">—</span>
-              <span class="tariff-unit">kWh</span>
-              <span class="tariff-delta" id="energy-in-t2-delta"></span>
-            </div>
+        <!-- Energy In: total + T1/T2 breakdown -->
+        <div class="summary-item summary-item--energy">
+          <div class="energy-row energy-row--main">
+            <span class="energy-label">Energy In</span>
+            <span class="energy-val" id="energy-in-total">—</span>
+            <span class="energy-unit">kWh</span>
+            <span class="energy-delta" id="energy-in-total-delta"></span>
+          </div>
+          <div class="energy-row energy-row--sub">
+            <span class="energy-label">T1</span>
+            <span class="energy-val" id="energy-in-t1">—</span>
+            <span class="energy-unit">kWh</span>
+            <span class="energy-delta" id="energy-in-t1-delta"></span>
+          </div>
+          <div class="energy-row energy-row--sub">
+            <span class="energy-label">T2</span>
+            <span class="energy-val" id="energy-in-t2">—</span>
+            <span class="energy-unit">kWh</span>
+            <span class="energy-delta" id="energy-in-t2-delta"></span>
           </div>
         </div>
 
-        <!-- Energy Out -->
-        <div class="summary-item">
-          <div class="summary-label">Energy Out</div>
-          <div class="summary-value" id="energy-out-total">—</div>
-          <div class="summary-unit">kWh</div>
-          <span class="summary-delta" id="energy-out-total-delta"></span>
-          <div class="summary-tariffs">
-            <div class="summary-tariff">
-              <span class="tariff-label">T1</span>
-              <span class="tariff-value" id="energy-out-t1">—</span>
-              <span class="tariff-unit">kWh</span>
-              <span class="tariff-delta" id="energy-out-t1-delta"></span>
-            </div>
-            <div class="summary-tariff">
-              <span class="tariff-label">T2</span>
-              <span class="tariff-value" id="energy-out-t2">—</span>
-              <span class="tariff-unit">kWh</span>
-              <span class="tariff-delta" id="energy-out-t2-delta"></span>
-            </div>
+        <!-- Energy Out: total + T1/T2 breakdown -->
+        <div class="summary-item summary-item--energy">
+          <div class="energy-row energy-row--main">
+            <span class="energy-label">Energy Out</span>
+            <span class="energy-val" id="energy-out-total">—</span>
+            <span class="energy-unit">kWh</span>
+            <span class="energy-delta" id="energy-out-total-delta"></span>
+          </div>
+          <div class="energy-row energy-row--sub">
+            <span class="energy-label">T1</span>
+            <span class="energy-val" id="energy-out-t1">—</span>
+            <span class="energy-unit">kWh</span>
+            <span class="energy-delta" id="energy-out-t1-delta"></span>
+          </div>
+          <div class="energy-row energy-row--sub">
+            <span class="energy-label">T2</span>
+            <span class="energy-val" id="energy-out-t2">—</span>
+            <span class="energy-unit">kWh</span>
+            <span class="energy-delta" id="energy-out-t2-delta"></span>
           </div>
         </div>
 
         <!-- Gas -->
         <div class="summary-item">
-          <div class="summary-label">Gas</div>
-          <div class="summary-value" id="gas-delivered">—</div>
-          <div class="summary-unit">m³</div>
-          <span class="summary-delta" id="gas-delta"></span>
+          <div class="energy-row energy-row--main">
+            <span class="energy-label">Gas</span>
+            <span class="energy-val" id="gas-delivered">—</span>
+            <span class="energy-unit">m³</span>
+            <span class="energy-delta" id="gas-delta"></span>
+          </div>
         </div>
 
-        <!-- Device (model + IP + serial + WiFi + SW) -->
+        <!-- Device -->
         <div class="summary-item summary-item--device">
-          <div class="summary-label">Device</div>
-          <div class="summary-value summary-value--sm" id="device-model">—</div>
-          <div class="summary-unit" id="device-ip">—</div>
-          <div class="summary-unit" id="device-serial">—</div>
-          <div class="summary-tariffs">
-            <div class="summary-tariff">
-              <span class="tariff-label">WiFi</span>
-              <span class="tariff-value" id="device-rssi">—</span>
-            </div>
-            <div class="summary-tariff">
-              <span class="tariff-label">SW</span>
-              <span class="tariff-value" id="device-sw">—</span>
-            </div>
+          <div class="energy-row energy-row--main">
+            <span class="energy-label">Device</span>
+            <span class="energy-val summary-value--sm" id="device-model">—</span>
+          </div>
+          <div class="energy-row energy-row--sub">
+            <span class="energy-label">IP</span>
+            <span class="energy-val" id="device-ip">—</span>
+          </div>
+          <div class="energy-row energy-row--sub">
+            <span class="energy-label">ID</span>
+            <span class="energy-val" id="device-serial">—</span>
+          </div>
+          <div class="energy-row energy-row--sub">
+            <span class="energy-label">WiFi</span>
+            <span class="energy-val" id="device-rssi">—</span>
+          </div>
+          <div class="energy-row energy-row--sub">
+            <span class="energy-label">SW</span>
+            <span class="energy-val" id="device-sw">—</span>
           </div>
         </div>
 

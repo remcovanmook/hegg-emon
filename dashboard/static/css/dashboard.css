@@ -236,7 +236,76 @@ html, body {
 .summary-delta--pos { color: var(--delivered-color); }
 .summary-delta--neg { color: var(--returned-color); }
 
-/* Tariff breakdown inside an energy summary cell */
+/* ── Header clock ── */
+.header-time {
+  font-size: 0.8rem;
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* ── Energy row layout (used in summary strip cells) ── */
+.energy-row {
+  display: grid;
+  /* label | value | unit | delta */
+  grid-template-columns: auto 1fr auto auto;
+  align-items: baseline;
+  column-gap: 5px;
+  padding: 1px 0;
+}
+
+.energy-row--sub {
+  padding-left: 10px;
+}
+
+.energy-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.energy-val {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.energy-row--main .energy-val {
+  font-size: 1.0rem;
+}
+
+.energy-row--sub .energy-val {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.energy-unit {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+}
+
+.energy-delta {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.energy-delta--pos { color: var(--delivered-color); }
+.energy-delta--neg { color: var(--returned-color); }
+
+.energy-row--sub .energy-delta {
+  opacity: 0.75;
+  font-size: 0.6rem;
+}
+
 .summary-tariffs {
   display: flex;
   flex-direction: column;

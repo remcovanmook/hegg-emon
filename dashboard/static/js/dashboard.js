@@ -175,6 +175,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Minute-level refresh for absolute values; device info is static.
   setInterval(loadSummary, 60_000);
   setInterval(loadDevice,  300_000);
+
+  // Clock — updates every second.
+  const tickClock = () => setText("header-time", new Date().toLocaleTimeString());
+  tickClock();
+  setInterval(tickClock, 1000);
 });
 
 /* ── Chart init ─────────────────────────────────────────────────────────── */
@@ -376,15 +381,15 @@ async function loadSummaryDelta(hours) {
   // Totals (sum of both tariffs)
   const inTotal  = (d.energy_delivered_t1 ?? 0) + (d.energy_delivered_t2 ?? 0);
   const outTotal = (d.energy_returned_t1  ?? 0) + (d.energy_returned_t2  ?? 0);
-  setDelta("energy-in-total-delta",  inTotal,                 label, "kWh");
-  setDelta("energy-out-total-delta", outTotal,                label, "kWh");
+  setEnergyDelta("energy-in-total-delta",  inTotal,  label, "kWh");
+  setEnergyDelta("energy-out-total-delta", outTotal, label, "kWh");
 
-  // Per-tariff breakdown (shown as tariff-delta elements)
-  setTariffDelta("energy-in-t1-delta",  d.energy_delivered_t1, label);
-  setTariffDelta("energy-in-t2-delta",  d.energy_delivered_t2, label);
-  setTariffDelta("energy-out-t1-delta", d.energy_returned_t1,  label);
-  setTariffDelta("energy-out-t2-delta", d.energy_returned_t2,  label);
-  setDelta("gas-delta",                 d.gas_delivered,        label, "m³");
+  // Per-tariff breakdown
+  setEnergyDelta("energy-in-t1-delta",  d.energy_delivered_t1, label, "kWh");
+  setEnergyDelta("energy-in-t2-delta",  d.energy_delivered_t2, label, "kWh");
+  setEnergyDelta("energy-out-t1-delta", d.energy_returned_t1,  label, "kWh");
+  setEnergyDelta("energy-out-t2-delta", d.energy_returned_t2,  label, "kWh");
+  setEnergyDelta("gas-delta",           d.gas_delivered,        label, "m³");
 }
 
 /** Fetch static device info (IP, model, serial, WiFi RSSI, SW). */
@@ -408,22 +413,23 @@ function clearDeltas() {
    "energy-in-t1-delta","energy-in-t2-delta",
    "energy-out-t1-delta","energy-out-t2-delta","gas-delta"].forEach(id => {
     const e = document.getElementById(id);
-    if (e) { e.textContent = ""; e.className = e.classList.contains("tariff-delta") ? "tariff-delta" : "summary-delta"; }
+    if (e) { e.textContent = ""; e.className = "energy-delta"; }
   });
 }
 
 /**
- * Set a compact per-tariff delta (no unit suffix, smaller display).
+ * Set an energy-row delta element (all levels use the same energy-delta class).
  * @param {string} id
  * @param {number} value
  * @param {string} period
+ * @param {string} unit
  */
-function setTariffDelta(id, value, period) {
+function setEnergyDelta(id, value, period, unit) {
   const e = document.getElementById(id);
   if (!e || value == null) return;
   const sign = value >= 0 ? "+" : "";
-  e.textContent = `${sign}${value.toFixed(3)} / ${period}`;
-  e.className   = `tariff-delta ${value >= 0 ? "tariff-delta--pos" : "tariff-delta--neg"}`;
+  e.textContent = `${sign}${value.toFixed(2)} ${unit} / ${period}`;
+  e.className   = `energy-delta ${value >= 0 ? "energy-delta--pos" : "energy-delta--neg"}`;
 }
 
 /**
