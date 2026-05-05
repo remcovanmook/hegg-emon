@@ -875,28 +875,16 @@ html, body {
   display: block;
 }
 
-/** Stat panel: flex row — groups column left, mini canvas right. */
+/** Stat panel: flex column — the three groups stacked vertically. */
 .wye-stats {
   display: flex;
-  flex-direction: row;
-  align-items: flex-end;   /* canvas floats to the bottom, beside neutral group */
-  gap: 20px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 24px;
   padding: 20px;
 }
 
-/**
- * Left column of .wye-stats: stacks the three stat groups vertically.
- * flex: 1 lets it fill the available space; min-width: 0 prevents overflow.
- */
-.wye-stats-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  flex: 1;
-  min-width: 0;
-}
-
-/** Each thematic group within .wye-stats-groups. */
+/** Each thematic group within .wye-stats. */
 .wye-stats-group {
   display: flex;
   flex-direction: column;
@@ -992,11 +980,22 @@ html, body {
 .wye-dot--l13 { background: var(--wye-l13); }
 .wye-dot--l23 { background: var(--wye-l23); }
 
-/** Mini polar canvas: fixed 140 × 140 px square, does not grow or shrink. */
+/**
+ * Table cell holding the mini neutral-offset canvas (rowspan=3 in the
+ * Neutral offset table, 4th column, aligned with the ideal-delta column).
+ * Vertical alignment and no extra padding so the canvas fills cleanly.
+ */
+.wt-canvas-cell {
+  vertical-align: middle;
+  padding: 4px 0 4px 8px;
+}
+
+/** Mini polar canvas container: fills the td width, stays square. */
 .wye-neutral-mini-wrap {
-  flex: 0 0 140px;
-  width: 140px;
-  height: 140px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  min-width: 120px;
+  max-width: 160px;
 }
 
 #wye-neutral-canvas {
