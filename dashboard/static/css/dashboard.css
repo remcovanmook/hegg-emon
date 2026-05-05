@@ -1040,3 +1040,7 @@ html, body {
   opacity: 0.55;
   margin-left: 0.3em;
 }
+
+.chart-wrapper--cost {
+  height: 220px;
+}

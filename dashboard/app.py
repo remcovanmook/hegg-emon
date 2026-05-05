@@ -110,10 +110,10 @@ def api_device() -> Response:
 
 @app.route("/api/prices", methods=["GET"])
 def api_prices() -> Response:
-    """Return day-ahead price entries for the next 48 hours.
+    """Return EPEX spot price entries for the last *hours* hours and all future data in the DB.
 
     Query parameters:
-        hours: Look-ahead window in hours (default 48, max 96).
+        hours: Historical look-back in hours (default 24).
 
     Each entry has ``ts_start`` (Unix ms), ``ts_end`` (Unix ms),
     ``price_eur_kwh`` (raw EPEX spot, no VAT/fees), and ``price_origin``
@@ -121,27 +121,34 @@ def api_prices() -> Response:
     """
     if _store is None:
         return Response(status=204)
-    hours = min(int(request.args.get("hours", 48)), 96)
+    hours = int(request.args.get("hours", 24))
     rows = _store.prices_window(hours=hours)
     if not rows:
         return Response(status=204)
     return jsonify(rows)
 
 
-@app.route("/api/prices/current", methods=["GET"])
-def api_prices_current() -> Response:
-    """Return the price entry covering the current UTC hour.
+@app.route("/api/summary/hourly", methods=["GET"])
+def api_summary_hourly() -> Response:
+    """Return per-hour energy and gas consumption deltas.
 
-    Returns 204 when no price is available (fetcher not configured or
-    has not run yet).
+    Computes the delta between consecutive hour-boundary summary rows so the
+    frontend receives per-hour consumption rather than cumulative totals.
+
+    Query parameters:
+        hours: Historical window in hours (default 24).
+
+    Each entry has ``ts`` (hour start, Unix ms) and per-tariff deltas for
+    ``energy_delivered_tariff1/2``, ``energy_returned_tariff1/2``, and
+    ``gas_delivered``.  Returns 204 when no data is available.
     """
     if _store is None:
         return Response(status=204)
-    price = _store.current_price()
-    if not price:
+    hours = int(request.args.get("hours", 24))
+    rows = _store.hourly_consumption(hours=hours)
+    if not rows:
         return Response(status=204)
-    return jsonify(price)
-
+    return jsonify(rows)
 
 
 @app.route("/api/events", methods=["GET"])
