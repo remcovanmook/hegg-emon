@@ -1,0 +1,68 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          hegg
+# Required-Start:    $network $remote_fs $syslog
+# Required-Stop:     $network $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Hegg energy monitor
+# Description:       UDP collector + dashboard + Prometheus for the Hegg
+#                    smart energy meter.
+### END INIT INFO
+
+# Configuration
+DAEMON_USER="hegg"
+INSTALL_DIR="/opt/hegg"
+PYTHON="$INSTALL_DIR/.venv/bin/python"
+DAEMON="$PYTHON $INSTALL_DIR/hegg_server.py"
+PIDFILE="/var/run/hegg.pid"
+LOGFILE="/var/log/hegg.log"
+CONFIG="/etc/hegg/hegg.conf"
+
+# Load config if present
+[ -f "$CONFIG" ] && . "$CONFIG"
+
+# Build argument list from environment
+ARGS=""
+[ -n "$HEGG_DEVICE_IP" ] && ARGS="$ARGS --device-ip $HEGG_DEVICE_IP"
+[ -n "$HEGG_DB"        ] && ARGS="$ARGS --db $HEGG_DB"
+[ -n "$HEGG_UDP_PORT"  ] && ARGS="$ARGS --udp-port $HEGG_UDP_PORT"
+[ -n "$HEGG_HTTP_PORT" ] && ARGS="$ARGS --http-port $HEGG_HTTP_PORT"
+[ -n "$HEGG_MQTT_HOST" ] && ARGS="$ARGS --mqtt-host $HEGG_MQTT_HOST"
+[ -n "$HEGG_MQTT_USER" ] && ARGS="$ARGS --mqtt-user $HEGG_MQTT_USER"
+[ -n "$HEGG_MQTT_PASS" ] && ARGS="$ARGS --mqtt-pass $HEGG_MQTT_PASS"
+
+. /lib/lsb/init-functions
+
+do_start() {
+    log_daemon_msg "Starting Hegg energy monitor" "hegg"
+    start-stop-daemon --start --quiet \
+        --chuid "$DAEMON_USER" \
+        --make-pidfile --pidfile "$PIDFILE" \
+        --background \
+        --exec "$PYTHON" -- "$INSTALL_DIR/hegg_server.py" $ARGS \
+        >> "$LOGFILE" 2>&1
+    log_end_msg $?
+}
+
+do_stop() {
+    log_daemon_msg "Stopping Hegg energy monitor" "hegg"
+    start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 \
+        --pidfile "$PIDFILE"
+    RETVAL="$?"
+    [ "$RETVAL" = 2 ] && return 2
+    rm -f "$PIDFILE"
+    log_end_msg "$RETVAL"
+    return "$RETVAL"
+}
+
+case "$1" in
+    start)   do_start ;;
+    stop)    do_stop ;;
+    restart) do_stop; do_start ;;
+    status)  status_of_proc -p "$PIDFILE" "$PYTHON" "hegg" ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}" >&2
+        exit 1
+        ;;
+esac

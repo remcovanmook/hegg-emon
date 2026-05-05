@@ -1,0 +1,21 @@
+[Unit]
+Description=Hegg energy monitor — all-in-one (collector + dashboard + Prometheus)
+Documentation=https://github.com/yourorg/hegg
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hegg
+Group=hegg
+WorkingDirectory=/opt/hegg
+Environment=HEGG_DB=/var/lib/hegg/hegg.db
+ExecStart=/opt/hegg/.venv/bin/python /opt/hegg/hegg_server.py \
+    --device-ip ${HEGG_DEVICE_IP} \
+    --db ${HEGG_DB}
+EnvironmentFile=-/etc/hegg/hegg.conf
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
