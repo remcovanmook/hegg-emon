@@ -1084,3 +1084,28 @@ html, body {
   border-bottom-color: var(--accent-blue);
   color: var(--text);
 }
+
+/* ── Cost chart net summary row ───────────────────────────────────────── */
+
+.cost-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.5rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+}
+
+.cost-summary-label {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.cost-summary-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+}
+
+.cost-net--positive { color: var(--accent-red);   }
+.cost-net--negative { color: var(--accent-green);  }

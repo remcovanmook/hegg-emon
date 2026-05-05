@@ -874,6 +874,15 @@ async function loadUsageCharts() {
     costChart.data.datasets[1].data = exportRevenue;
     costChart.update("none");
   }
+
+  // Net = sum of import costs + sum of export revenues (revenues are negative).
+  const netCost = importCost.reduce((a, b) => a + b, 0)
+                + exportRevenue.reduce((a, b) => a + b, 0);
+  const netEl = document.getElementById("cost-net-total");
+  if (netEl) {
+    netEl.textContent = `€${netCost.toFixed(2)}`;
+    netEl.className   = "cost-summary-value " + (netCost >= 0 ? "cost-net--positive" : "cost-net--negative");
+  }
 }
 
 /* ── SSE ────────────────────────────────────────────────────────────────── */
