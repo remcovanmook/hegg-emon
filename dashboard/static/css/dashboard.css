@@ -1047,6 +1047,13 @@ html, body {
 
 /* ── Tab bar ──────────────────────────────────────────────────────────── */
 
+/* Tab panels inherit the column layout of .main */
+[role="tabpanel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
 .tab-bar {
   display: flex;
   border-bottom: 1px solid var(--border);

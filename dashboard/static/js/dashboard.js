@@ -491,7 +491,7 @@ function initCharts() {
         { label: "Export T2 (kWh)", data: [], backgroundColor: COLORS.returned  + "55", borderRadius: 3, borderSkipped: false },
       ],
     },
-    options: _barOpts("kWh", v => `${v.toFixed(3)} kWh`, ctx => `${ctx.dataset.label}: ${Math.abs(ctx.parsed.y).toFixed(4)} kWh`),
+    options: _barOpts("kWh", v => `${v.toFixed(3)} kWh`, ctx => `${ctx.dataset.label}: ${Math.abs(ctx.parsed.y).toFixed(4)} kWh`, true),
   });
 
   // Hourly gas usage.
@@ -752,7 +752,7 @@ function switchTab(tabId) {
  * @param {function} tooltipFmt - Callback that formats a dataset value for tooltips.
  * @returns {object}
  */
-function _barOpts(yLabel, tickFmt, tooltipFmt) {
+function _barOpts(yLabel, tickFmt, tooltipFmt, stacked = false) {
   // 2-hour step for 24 h data — matches AXIS_CONFIG[24] on the electricity tab.
   const stepMs = 2 * 3_600_000;
   return {
@@ -763,6 +763,7 @@ function _barOpts(yLabel, tickFmt, tooltipFmt) {
     scales: {
       x: {
         type: "time",
+        stacked,
         time: {
           unit: "hour",
           stepSize: 2,
@@ -777,6 +778,7 @@ function _barOpts(yLabel, tickFmt, tooltipFmt) {
         },
       },
       y: {
+        stacked,
         ticks: { color: "#6b7490", font: { size: 11 }, callback: tickFmt },
         grid:  { color: "rgba(255,255,255,0.04)" },
       },
