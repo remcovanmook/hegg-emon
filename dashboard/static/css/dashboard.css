@@ -707,3 +707,29 @@ html, body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Flip annotation tooltip ── */
+.flip-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 200;
+  background: rgba(22, 26, 34, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 7px 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.ft-dir {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #e8eaf0;
+  margin-bottom: 2px;
+}
+
+.ft-ts {
+  font-size: 0.68rem;
+  font-family: "JetBrains Mono", monospace;
+  color: #9ca3af;
+}

@@ -154,6 +154,14 @@ let flipCount = 0;
 let selectedHours = 24;
 
 /**
+ * EMA state for live chart smoothing. Null until the first live reading
+ * arrives. Reset when history reloads so the EMA starts fresh from the
+ * last history point rather than carrying stale state.
+ * @type {object|null}
+ */
+let ema = null;
+
+/**
  * Flip annotation configs keyed by ID, mirrored across all charts.
  * Kept here so updateVoltageAnnotation can merge them with vMin/vMax.
  * @type {Object.<string, object>}
@@ -307,6 +315,7 @@ async function loadHistory(hours) {
   currentExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
   lastWasExporting = null;
   flipCount = 0;
+  ema = null;  // force EMA to re-seed from first live reading
   Object.keys(flipAnnotations).forEach(k => delete flipAnnotations[k]);
   powerChart.options.plugins.annotation.annotations = {};
   voltageCharts.forEach(c => { c.options.plugins.annotation.annotations = {}; });
@@ -554,30 +563,34 @@ function fmt1(v) {
 /* ── Chart append ───────────────────────────────────────────────────────── */
 
 function appendToCharts(r) {
-  const ts = new Date(r.timestamp).getTime();
+  const ts  = new Date(r.timestamp).getTime();
+  const s   = smoothReading(r);  // EMA-smoothed copy for chart points
 
   powerChart.data.datasets[0].data.push({
     x: ts,
-    y: Math.round((r.power_delivered - r.power_returned) * 1000),
+    y: Math.round((s.power_delivered - s.power_returned) * 1000),
   });
 
+  // Use raw r for flip detection — direction changes must be immediate.
   const exporting = r.power_returned > r.power_delivered;
   if (lastWasExporting !== null && exporting !== lastWasExporting) {
     addFlipAnnotation(ts, exporting);
   }
   lastWasExporting = exporting;
 
-  // Voltage
-  [r.voltage_l1, r.voltage_l2, r.voltage_l3].forEach((v, i) => {
-    voltageCharts[i].data.datasets[0].data.push({ x: ts, y: v });
+  // Voltage — smoothed for chart, raw for extremes tracking.
+  ["voltage_l1", "voltage_l2", "voltage_l3"].forEach((f, i) => {
+    voltageCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
+    const v = r[f];
     if (v < voltageExtremes[i].min) { voltageExtremes[i].min = v; updateVoltageAnnotation(i); }
     if (v > voltageExtremes[i].max) { voltageExtremes[i].max = v; updateVoltageAnnotation(i); }
   });
   syncChartScales(voltageCharts, voltageExtremes, 2);
 
-  // Current
-  [r.current_l1, r.current_l2, r.current_l3].forEach((v, i) => {
-    currentCharts[i].data.datasets[0].data.push({ x: ts, y: v });
+  // Current — smoothed for chart, raw for extremes.
+  ["current_l1", "current_l2", "current_l3"].forEach((f, i) => {
+    currentCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
+    const v = r[f];
     if (v < currentExtremes[i].min) currentExtremes[i].min = v;
     if (v > currentExtremes[i].max) currentExtremes[i].max = v;
   });
@@ -594,6 +607,33 @@ function appendToCharts(r) {
   powerChart.update("none");
   voltageCharts.forEach(c => c.update("none"));
   currentCharts.forEach(c => c.update("none"));
+}
+
+/**
+ * Apply an exponential moving average to a reading for chart smoothing.
+ *
+ * Alpha is derived from the current bucket size so live chart data matches
+ * the resolution of the history API.  Raw values are preserved for DOM
+ * display; only the chart-push path uses the smoothed copy.
+ *
+ * @param {object} r - Raw 1-second reading from SSE.
+ * @returns {object} Smoothed reading (same shape, timestamp unchanged).
+ */
+function smoothReading(r) {
+  const bucketSeconds = Math.max(5, Math.floor((selectedHours * 3600) / 500));
+  const alpha = 2 / (bucketSeconds + 1);
+  if (ema === null) {
+    ema = { ...r };
+    return { ...r };
+  }
+  const s = { ...r };
+  for (const key of ["power_delivered", "power_returned",
+                     "voltage_l1", "voltage_l2", "voltage_l3",
+                     "current_l1", "current_l2", "current_l3"]) {
+    s[key] = alpha * (r[key] ?? 0) + (1 - alpha) * (ema[key] ?? 0);
+  }
+  ema = s;
+  return s;
 }
 
 function trimOldPoints(chart, cutoff) {
@@ -683,24 +723,36 @@ function updateInlineScale(chart, extremes, minPad) {
 
 /**
  * Add a vertical flip marker at the given timestamp on ALL charts.
- * The annotation is stored in flipAnnotations so voltage charts can
- * merge it with their own min/max lines.
+ * enter/leave callbacks show a fixed tooltip with the exact timestamp.
  * @param {number}  tsMs     - Timestamp in milliseconds.
  * @param {boolean} toExport - Direction after the flip.
  */
 function addFlipAnnotation(tsMs, toExport) {
   const id    = `flip_${flipCount++}`;
   const color = toExport ? "rgba(34,197,94,0.55)" : "rgba(59,130,246,0.55)";
+  const label = toExport ? "→ Export" : "→ Import";
   const annotation = {
     type: "line", scaleID: "x", value: tsMs,
     borderColor: color, borderWidth: 1, borderDash: [4, 4],
     label: {
-      display: true,
-      content: toExport ? "→ Export" : "→ Import",
-      position: "start",
+      display: true, content: label, position: "start",
       backgroundColor: color, color: "#fff",
-      font: { size: 9, weight: "600" },
-      padding: { x: 4, y: 2 }, rotation: -90,
+      font: { size: 9, weight: "600" }, padding: { x: 4, y: 2 }, rotation: -90,
+    },
+    enter(ctx) {
+      const tip   = document.getElementById("flip-tooltip");
+      const dir   = toExport ? "↑ Export to grid" : "↓ Import from grid";
+      const dt    = new Date(tsMs);
+      const stamp = dt.toLocaleDateString() + " " + dt.toLocaleTimeString();
+      tip.innerHTML =
+        `<div class="ft-dir">${dir}</div><div class="ft-ts">${stamp}</div>`;
+      const rect = ctx.chart.canvas.getBoundingClientRect();
+      tip.style.left    = (rect.left + window.scrollX + ctx.element.x + 10) + "px";
+      tip.style.top     = (rect.top  + window.scrollY + 12) + "px";
+      tip.style.display = "block";
+    },
+    leave() {
+      document.getElementById("flip-tooltip").style.display = "none";
     },
   };
   flipAnnotations[id] = annotation;
