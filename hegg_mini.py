@@ -159,10 +159,10 @@ def _normalise_summary(raw: dict) -> dict:
     """
     return {
         "serial":              raw.get("serial"),
-        "sw_version":          raw.get("sw_version"),
+        "sw_version":          raw.get("swVersion"),
         "equipment_id":        raw.get("equipment_id"),
         "model":               raw.get("model"),
-        "wifi_rssi":           raw.get("wifi_rssi"),
+        "wifi_rssi":           raw.get("wifiRSSI"),
         "energy_delivered_t1": raw.get("energy_delivered_tariff1"),
         "energy_delivered_t2": raw.get("energy_delivered_tariff2"),
         "energy_returned_t1":  raw.get("energy_returned_tariff1"),
