@@ -171,39 +171,9 @@ class HeggStore:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.executescript(_DDL)
-            self._migrate(conn)
             conn.commit()
             self._local.conn = conn
         return self._local.conn
-
-    # Columns renamed from store-internal names to wire format names (2026-05).
-    _COLUMN_RENAMES = [
-        ("summaries", "sw_version",          "swVersion"),
-        ("summaries", "wifi_rssi",            "wifiRSSI"),
-        ("summaries", "energy_delivered_t1",  "energy_delivered_tariff1"),
-        ("summaries", "energy_delivered_t2",  "energy_delivered_tariff2"),
-        ("summaries", "energy_returned_t1",   "energy_returned_tariff1"),
-        ("summaries", "energy_returned_t2",   "energy_returned_tariff2"),
-    ]
-
-    def _migrate(self, conn: sqlite3.Connection) -> None:
-        """Apply idempotent column renames to an existing database.
-
-        Uses ``ALTER TABLE … RENAME COLUMN`` (SQLite 3.25+).  Each statement
-        is attempted individually; if the old column does not exist (fresh DB
-        or already migrated), the OperationalError is silently ignored.
-
-        Args:
-            conn: Open SQLite connection on which to run the migrations.
-        """
-        for table, old, new in self._COLUMN_RENAMES:
-            try:
-                conn.execute(
-                    f"ALTER TABLE {table} RENAME COLUMN {old} TO {new}"
-                )
-                conn.commit()
-            except sqlite3.OperationalError:
-                pass  # already renamed, or old column never existed
 
     def insert(self, reading: HeggReading) -> None:
         """Persist a single reading.
