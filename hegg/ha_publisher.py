@@ -68,7 +68,7 @@ except ImportError:
         "Install with: pip install aiomqtt"
     )
 
-from hegg.listener import HeggReading
+from hegg.reading import HeggReading
 
 #: MQTT topic prefix for Home Assistant discovery.
 HA_DISCOVERY_PREFIX: str = "homeassistant"

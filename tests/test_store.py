@@ -12,9 +12,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from hegg.listener import HeggReading
+from hegg.reading import HeggReading
 from hegg.store import HeggStore, RETENTION_DAYS
-from tests.test_listener import SAMPLE_JSON
+from tests.test_reading import SAMPLE_JSON
 
 
 def _make_store() -> HeggStore:
@@ -25,8 +25,8 @@ def _make_store() -> HeggStore:
 def _make_reading(offset_seconds: int = 0) -> HeggReading:
     """Build a HeggReading offset_seconds from SAMPLE_JSON timestamp."""
     base = datetime(2026, 5, 5, 8, 21, 25, tzinfo=timezone.utc)
-    d = dict(SAMPLE_JSON, timestamp=(base + timedelta(seconds=offset_seconds)).isoformat() + "Z")
-    return HeggReading.from_dict(d)
+    ts = (base + timedelta(seconds=offset_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return HeggReading.from_dict(dict(SAMPLE_JSON, timestamp=ts))
 
 
 class TestHeggStore:
@@ -76,7 +76,7 @@ class TestHeggStore:
     def test_prune_removes_old_rows(self):
         store = _make_store()
         # Insert a very old reading (8 days ago).
-        old_ts = (datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS + 1)).isoformat() + "Z"
+        old_ts = (datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS + 1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         old = HeggReading.from_dict(dict(SAMPLE_JSON, timestamp=old_ts))
         store.insert(old)
 

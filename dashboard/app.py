@@ -2,13 +2,15 @@
 dashboard.app
 =============
 
-Flask dashboard with SSE live stream, history API, and SQLite persistence.
+Flask dashboard for the Hegg energy monitor.
+
+Reads exclusively from the shared SQLite store written by ``hegg_collector``.
+No UDP socket, no listener threads — this process is a pure consumer.
 
 SSE implementation
 ------------------
 ``/stream`` polls the SQLite store for rows newer than the last-seen
-timestamp, sleeping 1 s between polls.  This matches the device's broadcast
-rate and needs no pub/sub machinery.  The most recent stored row is sent
+timestamp, sleeping 1 s between polls.  The most recent stored row is sent
 immediately on connect so the browser has data without waiting for the next
 poll cycle.
 
@@ -20,25 +22,29 @@ GET /
 GET /stream
     SSE stream; ``data:`` events are JSON-encoded reading dicts.
 GET /api/latest
-    Most recent reading as JSON, or 204.
+    Most recent 1-second reading as JSON, or 204.
+GET /api/summary/latest
+    Most recent minute-summary packet as JSON, or 204.
+GET /api/summary/delta
+    Cumulative energy/gas delta for a time window.
+    Query param: ``hours`` (default 24).
 GET /api/history
-    Bucketed history.  Query params:
-    ``hours``  — window width, 1-168 (default 24).
-    ``bucket`` — aggregation bucket seconds (default auto).
+    Bucketed readings.  Query params: ``hours`` (1-168), ``bucket`` (seconds).
+GET /api/device
+    Device identity: IP, serial, model, SW version, WiFi RSSI.
+GET /api/events
+    Recent unknown/raw event packets (debug).
 """
 
-import asyncio
 import json
 import logging
-import socket
 import time
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Iterator, List, Optional
+from typing import Iterator, Optional
 
 from flask import Flask, Response, jsonify, render_template, request
 
-from hegg.listener import HeggReading
 from hegg.store import HeggStore
 
 logger = logging.getLogger(__name__)
@@ -47,159 +53,10 @@ app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # ---------------------------------------------------------------------------
-# Shared state
+# Shared state — store is set by create_app()
 # ---------------------------------------------------------------------------
 
-_latest_reading: Optional[HeggReading] = None
-_latest_lock = threading.Lock()
-_device_ip: str = ""  # set when the listener locks onto a source
-
-# SQLite store — initialised by create_app().
 _store: Optional[HeggStore] = None
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-#: Source port the Hegg device broadcasts from.
-_DEVICE_SOURCE_PORT: int = 16120
-
-
-def _push_reading(reading: HeggReading) -> None:
-    """Persist a reading and record it as the latest.
-
-    Called from the asyncio UDP-listener thread.
-
-    Args:
-        reading: Freshly parsed reading from the Hegg device.
-    """
-    global _latest_reading
-    with _latest_lock:
-        _latest_reading = reading
-
-    if _store is not None:
-        try:
-            _store.insert(reading)
-        except Exception:
-            logger.exception("Store insert failed")
-
-
-def _run_listener(port: int, extra_handlers: List[Callable],
-                  device_ip: str = "") -> None:
-    """Receive Hegg UDP broadcasts using a raw blocking socket.
-
-    Filters by source port :data:`_DEVICE_SOURCE_PORT` (16120) to ignore
-    any other UDP traffic on the listen port.  Locks onto the source IP of
-    the first valid packet (or a pre-configured IP) to prevent processing
-    duplicates from other interfaces.
-
-    Args:
-        port:           UDP destination port to bind to (16121).
-        extra_handlers: Additional async callables run for each reading.
-        device_ip:      Lock to this source IP immediately.  Auto-detects
-                        from first seen packet if empty.
-    """
-    handler_loop: Optional[asyncio.AbstractEventLoop] = None
-    if extra_handlers:
-        handler_loop = asyncio.new_event_loop()
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    try:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    except AttributeError:
-        pass
-    sock.bind(("0.0.0.0", port))
-    sock.settimeout(1.0)
-    logger.info("UDP socket bound to 0.0.0.0:%d", port)
-
-    global _device_ip
-    locked_ip: str = device_ip
-    if device_ip:
-        _device_ip = device_ip
-
-    try:
-        while True:
-            try:
-                data, addr = sock.recvfrom(4096)
-            except socket.timeout:
-                continue
-
-            src_ip, src_port = addr
-
-            # Only accept packets from the device source port.
-            if src_port != _DEVICE_SOURCE_PORT:
-                continue
-
-            # Lock to the first seen device IP, or enforce the configured one.
-            if locked_ip:
-                if src_ip != locked_ip:
-                    continue
-            else:
-                locked_ip = src_ip
-                _device_ip = src_ip
-                logger.info("Locked onto Hegg device at %s:%d", src_ip, src_port)
-
-            try:
-                payload = json.loads(data.decode("utf-8"))
-            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-                logger.warning("Dropping undecodable packet from %s: %s", addr, exc)
-                continue
-
-            # Route by packet type.
-            if "energy_delivered_tariff1" in payload:
-                # Minute-summary packet.
-                if _store is not None:
-                    try:
-                        _store.insert_summary(payload)
-                    except Exception:
-                        logger.exception("Summary insert failed")
-                continue
-
-            # Standard 1-second reading.
-            try:
-                reading = HeggReading.from_dict(payload)
-            except (KeyError, ValueError) as exc:
-                # Unknown packet structure — store raw for inspection.
-                logger.info("Unknown packet from %s: fields=%s", src_ip, sorted(payload.keys()))
-                if _store is not None:
-                    try:
-                        _store.insert_event(payload)
-                    except Exception:
-                        pass
-                continue
-
-            _push_reading(reading)
-
-            if handler_loop:
-                for handler in extra_handlers:
-                    try:
-                        handler_loop.run_until_complete(handler(reading))
-                    except Exception:
-                        logger.exception("Extra handler error")
-    finally:
-        sock.close()
-        if handler_loop:
-            handler_loop.close()
-
-
-def _prune_loop(store: HeggStore, interval_s: int = 3600) -> None:
-    """Periodically prune old rows from the store.
-
-    Args:
-        store:      Store instance to prune.
-        interval_s: Sleep interval between prune passes in seconds.
-    """
-    while True:
-        threading.Event().wait(interval_s)
-        try:
-            deleted = store.prune()
-            if deleted:
-                logger.info("Pruned %d old readings from store", deleted)
-        except Exception:
-            logger.exception("Store prune failed")
-
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -211,6 +68,17 @@ def index() -> str:
     return render_template("dashboard.html")
 
 
+@app.route("/api/latest")
+def api_latest() -> Response:
+    """Return the most recent 1-second reading as JSON, or 204 if none yet."""
+    if _store is None:
+        return Response(status=503)
+    reading = _store.latest_reading()
+    if reading is None:
+        return Response(status=204)
+    return jsonify(reading.to_dict())
+
+
 @app.route("/api/summary/latest")
 def api_summary_latest() -> Response:
     """Return the most recent minute-summary packet, or 204."""
@@ -220,50 +88,44 @@ def api_summary_latest() -> Response:
     if not summary:
         return Response(status=204)
     return jsonify(summary)
+
+
 @app.route("/api/device")
 def api_device() -> Response:
-    """Return device identity: locked IP, serial, model from latest summary."""
-    info: dict = {"ip": _device_ip or None}
+    """Return device identity: IP from the store, serial/model from the latest summary.
+
+    The device IP is stored in the summaries table; the most recent summary
+    packet is the source of truth for hardware metadata.
+    """
+    info: dict = {}
     if _store is not None:
         s = _store.latest_summary()
-        info["serial"]  = s.get("serial")
-        info["model"]   = s.get("model")
-        info["sw"]      = s.get("sw_version")
+        info["ip"]       = s.get("ip")
+        info["serial"]   = s.get("serial")
+        info["model"]    = s.get("model")
+        info["sw"]       = s.get("sw_version")
         info["wifi_rssi"] = s.get("wifi_rssi")
     return jsonify(info)
 
 
-
-
 @app.route("/api/events")
 def api_events() -> Response:
-    """Return recent unknown/raw event packets (newest first)."""
+    """Return recent unknown/raw event packets, newest first (debug endpoint)."""
     if _store is None:
         return jsonify([])
     limit = int(request.args.get("limit", 20))
     return jsonify(_store.query_events(limit=limit))
 
 
-@app.route("/api/latest")
-def api_latest() -> Response:
-    """Return the most recent reading as JSON, or 204 if none yet."""
-    with _latest_lock:
-        reading = _latest_reading
-    if reading is None:
-        return Response(status=204)
-    return jsonify(reading.to_dict())
-
-
 @app.route("/api/summary/delta")
 def api_summary_delta() -> Response:
-    """Return cumulative deltas (delivered, returned, gas) for a time window.
+    """Return cumulative energy/gas deltas for a time window.
 
     Query parameters:
-        hours (int): Look-back window in hours. Defaults to 24.
+        hours (int): Look-back window in hours.  Defaults to 24.
 
     Returns:
-        JSON dict with ``energy_delivered``, ``energy_returned``,
-        ``gas_delivered`` keys (float kWh / m³), or 204 if no data.
+        JSON dict with per-tariff delivered/returned and gas fields, or 204.
     """
     if _store is None:
         return Response(status=503)
@@ -280,16 +142,15 @@ def api_history() -> Response:
 
     Query parameters:
         hours  (int, 1-168): Time window.  Default 24.
-        bucket (int):        Bucket width in seconds.  Default: auto.
+        bucket (int):        Bucket width in seconds.  Default: auto (~500 pts).
 
     Returns:
-        JSON array of averaged reading dicts, or 503 if no store.
+        JSON array of averaged reading dicts, or 503 if the store is not ready.
     """
     if _store is None:
         return jsonify({"error": "store not initialised"}), 503
 
     hours = max(1, min(int(request.args.get("hours", 24)), 168))
-    # Auto bucket: ~500 data points per request.
     auto_bucket = max(10, (hours * 3600) // 500)
     bucket = int(request.args.get("bucket", auto_bucket))
 
@@ -309,10 +170,8 @@ def stream() -> Response:
         return Response(": store not ready\n\n", mimetype="text/event-stream")
 
     def generate() -> Iterator[str]:
-        # Seed cursor 2 s before now so we catch the very latest row.
         since_ms = int(time.time() * 1000) - 2000
 
-        # Send the most recent row immediately so the browser doesn't wait.
         rows = _store.query_raw_since(since_ms - 3000, limit=1)
         if rows:
             yield f"data: {json.dumps(rows[-1])}\n\n"
@@ -330,7 +189,6 @@ def stream() -> Response:
                     datetime.fromisoformat(rows[-1]["timestamp"]).timestamp() * 1000
                 )
             else:
-                # Keep-alive comment to prevent proxy / browser timeout.
                 yield ": keep-alive\n\n"
 
     return Response(
@@ -339,26 +197,36 @@ def stream() -> Response:
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
-
 # ---------------------------------------------------------------------------
 # Application factory
 # ---------------------------------------------------------------------------
 
-def create_app(
-    udp_port: int = 16121,
-    db_path: str = "hegg.db",
-    extra_handlers: Optional[List] = None,
-    device_ip: str = "",
-) -> Flask:
-    """Start background threads and return the configured Flask app.
+def _prune_loop(store: HeggStore, interval_s: int = 3600) -> None:
+    """Periodically prune old rows from the store.
 
     Args:
-        udp_port:       UDP port to listen on for Hegg broadcasts.
-        db_path:        Path to the SQLite database file.
-        extra_handlers: Additional async handler callables registered with
-                        the UDP listener (e.g. Prometheus exporter handle).
-        device_ip:      Lock the listener to this source IP immediately;
-                        auto-detects from first packet if empty.
+        store:      Store instance to prune.
+        interval_s: Sleep interval between prune passes in seconds.
+    """
+    while True:
+        threading.Event().wait(interval_s)
+        try:
+            deleted = store.prune()
+            if deleted:
+                logger.info("Pruned %d old readings from store", deleted)
+        except Exception:
+            logger.exception("Store prune failed")
+
+
+def create_app(db_path: str = "hegg.db") -> Flask:
+    """Initialise the store and return the configured Flask app.
+
+    Starts one background thread (prune loop).  The UDP collector is a
+    separate process (``hegg_collector.py``) and must be running for live
+    data to appear.
+
+    Args:
+        db_path: Path to the shared SQLite database file.
 
     Returns:
         Configured :class:`flask.Flask` instance.
@@ -367,32 +235,23 @@ def create_app(
     _store = HeggStore(path=db_path)
 
     threading.Thread(
-        target=_run_listener,
-        args=(udp_port, extra_handlers or [], device_ip),
-        daemon=True,
-        name="hegg-udp",
-    ).start()
-
-    threading.Thread(
         target=_prune_loop,
         args=(_store,),
         daemon=True,
         name="hegg-prune",
     ).start()
 
-    logger.info("UDP listener started on port %d", udp_port)
     return app
 
 
 if __name__ == "__main__":
     import argparse
     logging.basicConfig(level=logging.INFO)
-    p = argparse.ArgumentParser()
-    p.add_argument("--udp-port",  type=int, default=16121)
+    p = argparse.ArgumentParser(description="Hegg dashboard server")
     p.add_argument("--http-port", type=int, default=8080)
-    p.add_argument("--db",        default="hegg.db")
-    p.add_argument("--debug",     action="store_true")
+    p.add_argument("--db", default="hegg.db")
+    p.add_argument("--debug", action="store_true")
     args = p.parse_args()
-    create_app(udp_port=args.udp_port, db_path=args.db)
+    create_app(db_path=args.db)
     app.run(host="0.0.0.0", port=args.http_port, debug=args.debug,
             use_reloader=False, threaded=True)

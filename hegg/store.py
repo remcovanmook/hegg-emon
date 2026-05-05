@@ -2,7 +2,7 @@
 hegg.store
 ==========
 
-SQLite-backed time-series store for :class:`~hegg.listener.HeggReading` objects.
+SQLite-backed time-series store for :class:`~hegg.reading.HeggReading` objects.
 
 Readings are stored verbatim (1 s resolution) and queried in time-bucketed
 aggregates so the frontend does not have to receive 600k+ raw rows for a
@@ -29,7 +29,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Union
 
-from hegg.listener import HeggReading
+from hegg.reading import HeggReading
 
 #: Number of days of raw readings to retain.
 RETENTION_DAYS: int = 7
@@ -113,12 +113,16 @@ class HeggStore:
         self._path = str(path)
         self._local = threading.local()
         self._write_lock = threading.Lock()
-        # Initialise schema on the calling thread's connection.
-        self._conn().executescript(_DDL)
-        self._conn().commit()
+        # Trigger schema creation on the calling thread's connection.
+        self._conn()
 
     def _conn(self) -> sqlite3.Connection:
         """Return (or create) the per-thread SQLite connection.
+
+        Creates the schema on first use for each thread.  The DDL uses
+        ``CREATE TABLE IF NOT EXISTS`` throughout, so it is safe to run on
+        every new connection — including per-thread Flask connections and
+        ``:memory:`` databases used in tests.
 
         Returns:
             An open :class:`sqlite3.Connection` for the current thread.
@@ -127,6 +131,8 @@ class HeggStore:
             conn = sqlite3.connect(self._path, check_same_thread=False)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
+            conn.executescript(_DDL)
+            conn.commit()
             self._local.conn = conn
         return self._local.conn
 
@@ -207,7 +213,7 @@ class HeggStore:
             bucket_seconds: Aggregation bucket width in seconds.
 
         Returns:
-            List of dicts with keys matching :meth:`~hegg.listener.HeggReading.to_dict`,
+            List of dicts with keys matching :meth:`~hegg.reading.HeggReading.to_dict`,
             plus ``timestamp`` as an ISO 8601 string (bucket midpoint, UTC).
         """
         bucket_ms = bucket_seconds * 1000
@@ -303,6 +309,37 @@ class HeggStore:
                 ),
             )
             self._conn().commit()
+
+    def latest_reading(self) -> "Optional[HeggReading]":
+        """Return the most recent 1-second reading, or ``None`` if the store is empty.
+
+        Constructs a :class:`~hegg.reading.HeggReading` directly from the DB
+        row to avoid any timestamp-format ambiguity.
+
+        Returns:
+            The newest :class:`~hegg.reading.HeggReading`, or ``None``.
+        """
+        from hegg.reading import HeggReading
+        row = self._conn().execute(
+            "SELECT ts, serial, delivered, returned, "
+            "voltage_l1, voltage_l2, voltage_l3, "
+            "current_l1, current_l2, current_l3 "
+            "FROM readings ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        return HeggReading(
+            timestamp=datetime.fromtimestamp(row[0] / 1000, tz=timezone.utc),
+            serial=row[1],
+            power_delivered=row[2],
+            power_returned=row[3],
+            voltage_l1=row[4],
+            voltage_l2=row[5],
+            voltage_l3=row[6],
+            current_l1=row[7],
+            current_l2=row[8],
+            current_l3=row[9],
+        )
 
     def latest_summary(self) -> dict:
         """Return the most recent summary packet, or an empty dict.
