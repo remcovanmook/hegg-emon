@@ -894,7 +894,7 @@ async function loadUsageCharts() {
   const netCost     = totalImport - totalExport;
   const netEl       = document.getElementById("cost-net-total");
   if (netEl) {
-    netEl.textContent = `€${netCost.toFixed(2)}`;
+    netEl.textContent = netCost.toFixed(2);
     netEl.className   = "power-value mono " + (netCost >= 0 ? "cost-import" : "cost-export");
   }
   const costDeltaIn  = document.getElementById("cost-delta-in");
