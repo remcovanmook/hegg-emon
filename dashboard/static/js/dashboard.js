@@ -241,7 +241,7 @@ const THEME_LABELS = { light: "☀️ Light", dark: "🌙 Dark", auto: "◐ Auto
 function isDarkTheme() {
   const t = document.documentElement.dataset.theme;
   if (t === "dark") return true;
-  if (t === "auto") return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  if (t === "auto") return globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
   return false;
 }
 
@@ -306,7 +306,7 @@ function recolorCharts() {
           ? COLORS.delivered + "22" : COLORS.returned + "22";
       } else if (ds.label === "V" || ds.label === "A") {
         // Sparkline datasets keep their original colour — update via index.
-        const idx = voltageCharts.indexOf(chart) !== -1
+        const idx = voltageCharts.includes(chart)
           ? voltageCharts.indexOf(chart)
           : currentCharts.indexOf(chart);
         if (idx >= 0) {
@@ -350,7 +350,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   connectSSE();
 
   el.historyRange.addEventListener("change", () => {
-    selectedHours = parseInt(el.historyRange.value, 10);
+    selectedHours = Number.parseInt(el.historyRange.value, 10);
     loadHistory(selectedHours);
     loadSummaryDelta(selectedHours);
   });
@@ -365,7 +365,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Re-colour charts when OS preference changes while in auto mode.
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  globalThis.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     if (document.documentElement.dataset.theme === "auto") recolorCharts();
   });
 
@@ -386,7 +386,7 @@ function initCharts() {
   Chart.defaults.color = "#6b7490";
 
   // Power chart: net only; afterDataLimits always includes zero.
-  const powerOpts = JSON.parse(JSON.stringify(BASE_OPTS));
+  const powerOpts = structuredClone(BASE_OPTS);
   powerOpts.scales.y.afterDataLimits = scale => {
     scale.min = Math.min(scale.min, 0);
     scale.max = Math.max(scale.max, 0);
@@ -615,7 +615,7 @@ async function loadDevice() {
   setText("device-model",  d.model   ?? "—");
   setText("device-ip",     d.ip      ?? "—");
   setText("device-serial", d.serial  ?? "—");
-  setText("device-rssi",   d.wifi_rssi != null ? `${d.wifi_rssi} dBm` : "—");
+  setText("device-rssi",   d.wifi_rssi == null ? "—" : `${d.wifi_rssi} dBm`);
   setText("device-sw",     d.sw      ?? "—");
 }
 
@@ -724,7 +724,7 @@ function setValue(elem, val) {
   if (!elem) return;
   elem.textContent = String(val);
   elem.classList.remove("value-updated");
-  void elem.offsetWidth;
+  elem.getBoundingClientRect(); // force reflow to re-trigger the CSS animation
   elem.classList.add("value-updated");
 }
 
@@ -735,7 +735,7 @@ function setText(id, val) {
 
 /** Format a number to 1 decimal place, or "—" if null/undefined. */
 function fmt1(v) {
-  return v != null ? Number(v).toFixed(1) : "—";
+  return v == null ? "—" : Number(v).toFixed(1);
 }
 
 /* ── Chart append ───────────────────────────────────────────────────────── */
@@ -882,7 +882,7 @@ function applyXAxisConfig(hours) {
  * @returns {{ min: number, max: number, step: number }}
  */
 function niceScale(rawMin, rawMax, maxIntervals = 5) {
-  if (!isFinite(rawMin) || !isFinite(rawMax) || rawMin === rawMax) {
+  if (!Number.isFinite(rawMin) || !Number.isFinite(rawMax) || rawMin === rawMax) {
     // Degenerate range: expand by one unit so at least one grid line exists.
     return { min: Math.floor(rawMin) - 1, max: Math.ceil(rawMax) + 1, step: 1 };
   }
@@ -890,10 +890,11 @@ function niceScale(rawMin, rawMax, maxIntervals = 5) {
   const roughStep = range / maxIntervals;
   const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
   const norm      = roughStep / magnitude;
-  const step = norm <= 1 ? magnitude
-             : norm <= 2 ? 2 * magnitude
-             : norm <= 5 ? 5 * magnitude
-             :             10 * magnitude;
+  let step;
+  if (norm <= 1)      { step = magnitude; }
+  else if (norm <= 2) { step = 2 * magnitude; }
+  else if (norm <= 5) { step = 5 * magnitude; }
+  else                { step = 10 * magnitude; }
   return {
     min:  Math.floor(rawMin / step) * step,
     max:  Math.ceil(rawMax  / step) * step,
@@ -922,7 +923,7 @@ function syncChartScales(charts, perPhaseExtremes, minFloor = -Infinity) {
     if (e.min < globalMin) globalMin = e.min;
     if (e.max > globalMax) globalMax = e.max;
   });
-  if (!isFinite(globalMin) || !isFinite(globalMax)) return;
+  if (!Number.isFinite(globalMin) || !Number.isFinite(globalMax)) return;
 
   // Clamp the raw lower bound before computing the nice scale so that the
   // floor is reflected in the rounding, not just clamped after the fact.
@@ -948,7 +949,7 @@ function syncChartScales(charts, perPhaseExtremes, minFloor = -Infinity) {
  */
 function updateInlineScale(chart, extremes, minPad) {
   const { min, max } = extremes;
-  if (!isFinite(min) || !isFinite(max)) return;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return;
   const pad = Math.max(minPad, (max - min) * 0.25);
   chart.options.scales.y.min = min - pad;
   chart.options.scales.y.max = max + pad;
@@ -1003,7 +1004,7 @@ function addFlipAnnotation(tsMs, toExport) {
  */
 function updateVoltageAnnotation(phaseIndex) {
   const { min, max } = voltageExtremes[phaseIndex];
-  if (!isFinite(min) || !isFinite(max)) return;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return;
   const chart = voltageCharts[phaseIndex];
   // Merge flip markers with the min/max lines rather than replacing everything.
   chart.options.plugins.annotation.annotations = {
@@ -1166,7 +1167,7 @@ function drawWyeDiagram(v1, v2, v3) {
 
   // Scale so the largest phase vector occupies 80 % of the half-dimension.
   const maxV  = Math.max(v1, v2, v3, 1);
-  const scale = (Math.min(W, H) * 0.40) / maxV;
+  const scale = (Math.min(W, H) * 0.4) / maxV;
 
   // Pull CSS custom-property colours for theme consistency.
   const css   = getComputedStyle(document.documentElement);
@@ -1258,7 +1259,7 @@ function drawWyeDiagram(v1, v2, v3) {
   drawIecRing(IEC_LOW,  "rgba(251,146,60,0.55)",  [3, 3], "−10 %",  Math.PI * 0.25);
   drawIecRing(IEC_HIGH, "rgba(251,146,60,0.55)",  [3, 3], "+10 %",  Math.PI * 0.25);
   // Nominal ring.
-  drawIecRing(IEC_NOM,  "rgba(255,255,255,0.30)", [5, 3], "230 V",  Math.PI * 0.20);
+  drawIecRing(IEC_NOM,  "rgba(255,255,255,0.30)", [5, 3], "230 V",  Math.PI * 0.2);
 
   // ── Mean-voltage reference ring (dashed, dim) ──
   ctx.beginPath();
@@ -1344,7 +1345,7 @@ function drawWyeDiagram(v1, v2, v3) {
   const npy = cy - ns.im * scale;
 
   // Only draw if the offset is visible (> 0.5 px).
-  const nLen = Math.sqrt((npx - cx) ** 2 + (npy - cy) ** 2);
+  const nLen = Math.hypot(npx - cx, npy - cy);
   if (nLen > 0.5) {
     ctx.beginPath();
     ctx.moveTo(cx, cy);
@@ -1441,7 +1442,7 @@ function updateWyeDiagram(v1, v2, v3) {
 
   // Neutral offset.
   const ns    = neutralShift(v1, v2, v3);
-  const nMag  = Math.sqrt(ns.re ** 2 + ns.im ** 2);
+  const nMag  = Math.hypot(ns.re, ns.im);
   const nAng  = (Math.atan2(ns.im, ns.re) * 180 / Math.PI).toFixed(1);
   const imbal = voltageImbalance(v1, v2, v3);
   setText("wye-neutral-mag", nMag.toFixed(2));
@@ -1500,11 +1501,11 @@ function drawNeutralMini(re, im, mag) {
   const scale  = R / maxRef;
 
   // Background rings at 25 %, 50 %, 75 %, 100 % of maxRef.
-  [0.25, 0.5, 0.75, 1.0].forEach(frac => {
+  [0.25, 0.5, 0.75, 1].forEach(frac => {
     ctx.beginPath();
     ctx.arc(cx, cy, R * frac, 0, 2 * Math.PI);
     ctx.strokeStyle = cGrid;
-    ctx.lineWidth   = frac === 1.0 ? 1 : 0.75;
+    ctx.lineWidth   = frac === 1 ? 1 : 0.75;
     ctx.setLineDash([]);
     ctx.stroke();
   });
@@ -1556,7 +1557,7 @@ function drawNeutralMini(re, im, mag) {
   // Neutral offset vector — only draw if magnitude produces a visible length.
   const vx    = cx + re * scale;
   const vy    = cy - im * scale;
-  const pxLen = Math.sqrt((vx - cx) ** 2 + (vy - cy) ** 2);
+  const pxLen = Math.hypot(vx - cx, vy - cy);
 
   if (pxLen > 1.5) {
     // Shaft.

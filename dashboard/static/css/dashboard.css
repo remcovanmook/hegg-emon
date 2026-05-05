@@ -43,6 +43,12 @@
   font-family: "Inter", system-ui, sans-serif;
   font-size: 16px;
   color-scheme: light;
+
+  /* Wye diagram — line-to-line differential and neutral colours */
+  --wye-l12: #a78bfa;     /* violet */
+  --wye-l13: #34d399;     /* emerald */
+  --wye-l23: #fbbf24;     /* amber */
+  --wye-neutral: #f43f5e; /* rose — neutral offset indicator */
 }
 
 /* ── Dark theme ── */
@@ -840,15 +846,6 @@ html, body {
 
 /*
  * Colours for the six line-to-line differential vectors.
- * Using CSS custom properties so they inherit theme awareness automatically.
- */
-:root {
-  --wye-l12: #a78bfa;   /* violet */
-  --wye-l13: #34d399;   /* emerald */
-  --wye-l23: #fbbf24;   /* amber */
-  --wye-neutral: #f43f5e; /* rose — neutral offset indicator */
-}
-
 /** Outer card layout: diagram left, stats right. */
 .wye-card {
   padding: 20px;

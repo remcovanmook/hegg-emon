@@ -39,10 +39,10 @@
         </select>
         <span class="header-time" id="header-time" aria-live="off">—</span>
         <button id="theme-toggle" class="theme-toggle" aria-label="Toggle colour theme"></button>
-        <div class="connection-status" id="connection-status" role="status" aria-live="polite">
+        <output class="connection-status" id="connection-status" aria-live="polite">
           <span class="status-dot" id="status-dot"></span>
           <span class="status-label" id="status-label">Connecting…</span>
-        </div>
+        </output>
       </div>
     </div>
   </header>
@@ -58,18 +58,21 @@
         <div class="summary-item">
           <div class="summary-item-header">Energy In</div>
           <table class="summary-table">
-            <tr>
-              <td class="st-energy"><span id="energy-in-total">—</span> kWh</td>
-              <td class="st-delta"><span id="energy-in-total-delta"></span></td>
-            </tr>
-            <tr>
-              <td class="st-energy st-energy--sub">T1 <span id="energy-in-t1">—</span> kWh</td>
-              <td class="st-delta"><span id="energy-in-t1-delta"></span></td>
-            </tr>
-            <tr>
-              <td class="st-energy st-energy--sub">T2 <span id="energy-in-t2">—</span> kWh</td>
-              <td class="st-delta"><span id="energy-in-t2-delta"></span></td>
-            </tr>
+            <thead><tr><th class="sr-only" scope="col">Value</th><th class="sr-only" scope="col">Change</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="st-energy"><span id="energy-in-total">—</span> kWh</td>
+                <td class="st-delta"><span id="energy-in-total-delta"></span></td>
+              </tr>
+              <tr>
+                <td class="st-energy st-energy--sub">T1 <span id="energy-in-t1">—</span> kWh</td>
+                <td class="st-delta"><span id="energy-in-t1-delta"></span></td>
+              </tr>
+              <tr>
+                <td class="st-energy st-energy--sub">T2 <span id="energy-in-t2">—</span> kWh</td>
+                <td class="st-delta"><span id="energy-in-t2-delta"></span></td>
+              </tr>
+            </tbody>
           </table>
         </div>
 
@@ -77,18 +80,21 @@
         <div class="summary-item">
           <div class="summary-item-header">Energy Out</div>
           <table class="summary-table">
-            <tr>
-              <td class="st-energy"><span id="energy-out-total">—</span> kWh</td>
-              <td class="st-delta"><span id="energy-out-total-delta"></span></td>
-            </tr>
-            <tr>
-              <td class="st-energy st-energy--sub">T1 <span id="energy-out-t1">—</span> kWh</td>
-              <td class="st-delta"><span id="energy-out-t1-delta"></span></td>
-            </tr>
-            <tr>
-              <td class="st-energy st-energy--sub">T2 <span id="energy-out-t2">—</span> kWh</td>
-              <td class="st-delta"><span id="energy-out-t2-delta"></span></td>
-            </tr>
+            <thead><tr><th class="sr-only" scope="col">Value</th><th class="sr-only" scope="col">Change</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="st-energy"><span id="energy-out-total">—</span> kWh</td>
+                <td class="st-delta"><span id="energy-out-total-delta"></span></td>
+              </tr>
+              <tr>
+                <td class="st-energy st-energy--sub">T1 <span id="energy-out-t1">—</span> kWh</td>
+                <td class="st-delta"><span id="energy-out-t1-delta"></span></td>
+              </tr>
+              <tr>
+                <td class="st-energy st-energy--sub">T2 <span id="energy-out-t2">—</span> kWh</td>
+                <td class="st-delta"><span id="energy-out-t2-delta"></span></td>
+              </tr>
+            </tbody>
           </table>
         </div>
 
@@ -96,10 +102,13 @@
         <div class="summary-item">
           <div class="summary-item-header">Gas</div>
           <table class="summary-table">
-            <tr>
-              <td class="st-energy"><span id="gas-delivered">—</span> m³</td>
-              <td class="st-delta"><span id="gas-delta"></span></td>
-            </tr>
+            <thead><tr><th class="sr-only" scope="col">Value</th><th class="sr-only" scope="col">Change</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="st-energy"><span id="gas-delivered">—</span> m³</td>
+                <td class="st-delta"><span id="gas-delta"></span></td>
+              </tr>
+            </tbody>
           </table>
         </div>
 
@@ -107,10 +116,13 @@
         <div class="summary-item">
           <div class="summary-item-header">Device <span class="header-device-model" id="device-model"></span></div>
           <table class="summary-table">
-            <tr><td class="st-label">IP</td><td class="st-energy st-energy--sub" id="device-ip">—</td></tr>
-            <tr><td class="st-label">ID</td><td class="st-energy st-energy--sub" id="device-serial">—</td></tr>
-            <tr><td class="st-label">WiFi</td><td class="st-energy st-energy--sub" id="device-rssi">—</td></tr>
-            <tr><td class="st-label">SW</td><td class="st-energy st-energy--sub" id="device-sw">—</td></tr>
+            <thead><tr><th class="sr-only" scope="col">Property</th><th class="sr-only" scope="col">Value</th></tr></thead>
+            <tbody>
+              <tr><td class="st-label">IP</td><td class="st-energy st-energy--sub" id="device-ip">—</td></tr>
+              <tr><td class="st-label">ID</td><td class="st-energy st-energy--sub" id="device-serial">—</td></tr>
+              <tr><td class="st-label">WiFi</td><td class="st-energy st-energy--sub" id="device-rssi">—</td></tr>
+              <tr><td class="st-label">SW</td><td class="st-energy st-energy--sub" id="device-sw">—</td></tr>
+            </tbody>
           </table>
         </div>
 
@@ -239,6 +251,7 @@
             <div class="wye-stats-group">
               <div class="wye-stats-header">Phase voltages</div>
               <table class="wye-table" id="wye-phase-table">
+                <thead><tr><th class="sr-only" scope="col">Phase</th><th class="sr-only" scope="col">Voltage</th><th class="sr-only" scope="col">Unit</th><th class="sr-only" scope="col">IEC delta</th></tr></thead>
                 <tbody>
                   <tr>
                     <td class="wt-label"><span class="wye-dot wye-dot--l1"></span>L1</td>
@@ -265,6 +278,7 @@
             <div class="wye-stats-group">
               <div class="wye-stats-header">Line differentials</div>
               <table class="wye-table">
+                <thead><tr><th class="sr-only" scope="col">Phase pair</th><th class="sr-only" scope="col">Voltage</th><th class="sr-only" scope="col">Unit</th><th class="sr-only" scope="col">IEC delta</th></tr></thead>
                 <tbody>
                   <tr>
                     <td class="wt-label"><span class="wye-dot wye-dot--l12"></span>L1–L2</td>
@@ -291,6 +305,7 @@
             <div class="wye-stats-group">
               <div class="wye-stats-header">Neutral offset</div>
               <table class="wye-table">
+                <thead><tr><th class="sr-only" scope="col">Metric</th><th class="sr-only" scope="col">Value</th><th class="sr-only" scope="col">Unit</th><th class="sr-only" scope="col">Diagram</th></tr></thead>
                 <tbody>
                   <tr>
                     <td class="wt-label">Magnitude</td>
