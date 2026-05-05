@@ -1090,6 +1090,12 @@ let wyeCanvas = null;
 /** @type {CanvasRenderingContext2D|null} */
 let wyeCtx = null;
 
+/** @type {HTMLCanvasElement|null} Mini neutral-offset polar canvas. */
+let neutralCanvas = null;
+
+/** @type {CanvasRenderingContext2D|null} */
+let neutralCtx = null;
+
 /**
  * Initialise the wye canvas element.
  * Sets the pixel buffer to twice the CSS size for crisp HiDPI rendering.
@@ -1101,6 +1107,14 @@ function initWyeDiagram() {
   wyeCtx = wyeCanvas.getContext("2d");
   resizeWyeCanvas();
   window.addEventListener("resize", resizeWyeCanvas);
+
+  // Mini neutral-offset canvas.
+  neutralCanvas = document.getElementById("wye-neutral-canvas");
+  if (neutralCanvas) {
+    neutralCtx = neutralCanvas.getContext("2d");
+    resizeNeutralCanvas();
+    window.addEventListener("resize", resizeNeutralCanvas);
+  }
 }
 
 /**
@@ -1114,6 +1128,16 @@ function resizeWyeCanvas() {
   wyeCanvas.width  = rect.width  * dpr;
   wyeCanvas.height = rect.height * dpr;
   wyeCtx.scale(dpr, dpr);
+}
+
+/** Resize the mini neutral-offset canvas pixel buffer (same logic as the main wye canvas). */
+function resizeNeutralCanvas() {
+  if (!neutralCanvas) return;
+  const dpr  = window.devicePixelRatio || 1;
+  const rect = neutralCanvas.getBoundingClientRect();
+  neutralCanvas.width  = rect.width  * dpr;
+  neutralCanvas.height = rect.height * dpr;
+  neutralCtx.scale(dpr, dpr);
 }
 
 /**
@@ -1362,10 +1386,31 @@ function drawWyeDiagram(v1, v2, v3) {
 function updateWyeDiagram(v1, v2, v3) {
   if (!v1 || !v2 || !v3) return;
 
-  // Phase voltage DOM.
+  // IEC 61000-3-3 / EN 50160 nominal voltage.
+  const IEC_NOM = 230;
+
+  // Phase voltage DOM + delta vs IEC nominal.
   setText("wye-v-l1", v1.toFixed(1));
   setText("wye-v-l2", v2.toFixed(1));
   setText("wye-v-l3", v3.toFixed(1));
+
+  /**
+   * Set a phase-voltage IEC delta cell.
+   * Positive = above 230 V (green), negative = below (red).
+   * @param {string} id
+   * @param {number} v
+   */
+  const setPhaseIdeal = (id, v) => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    const delta = v - IEC_NOM;
+    const sign  = delta >= 0 ? "+" : "";
+    e.textContent = `${sign}${delta.toFixed(1)} V vs 230`;
+    e.className   = `wt-ideal ${delta >= 0 ? "wt-ideal--pos" : "wt-ideal--neg"}`;
+  };
+  setPhaseIdeal("wye-ideal-l1", v1);
+  setPhaseIdeal("wye-ideal-l2", v2);
+  setPhaseIdeal("wye-ideal-l3", v3);
 
   // Line differentials.
   const mean   = (v1 + v2 + v3) / 3;
@@ -1400,6 +1445,152 @@ function updateWyeDiagram(v1, v2, v3) {
   setText("wye-neutral-ang", nAng);
   setText("wye-imbalance",   imbal.toFixed(2));
 
-  // Canvas render.
+  // Canvas renders.
   drawWyeDiagram(v1, v2, v3);
+  drawNeutralMini(ns.re, ns.im, nMag);
+}
+
+/**
+ * Draw the mini neutral-offset polar diagram.
+ *
+ * Shows the neutral shift vector (magnitude and direction) on a small canvas
+ * with concentric reference rings so severity can be assessed at a glance.
+ *
+ * Scale: the outer ring equals maxRef volts, where maxRef is the smallest
+ * multiple of 5 V that is ≥ 2 × the current magnitude, with a floor of 5 V.
+ * This keeps the vector large enough to read while the axis auto-expands
+ * when the offset grows.
+ *
+ * Phase direction labels (L1 up, L2 lower-right, L3 lower-left) are drawn
+ * just outside the outer ring so the viewer can relate the offset angle to
+ * which phase is pulling the neutral.
+ *
+ * @param {number} re  - Real part of neutral shift (V).
+ * @param {number} im  - Imaginary part of neutral shift (V).
+ * @param {number} mag - Magnitude of neutral shift (V).
+ */
+function drawNeutralMini(re, im, mag) {
+  if (!neutralCtx || !neutralCanvas) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const W   = neutralCanvas.width  / dpr;
+  const H   = neutralCanvas.height / dpr;
+  const cx  = W / 2;
+  const cy  = H / 2;
+
+  const css    = getComputedStyle(document.documentElement);
+  const cprop  = name => css.getPropertyValue(name).trim();
+  const cN     = cprop("--wye-neutral");
+  const cGrid  = cprop("--chart-grid");
+  const cText  = cprop("--text-muted");
+  const cDim   = cprop("--text-dim");
+  const cl1    = cprop("--phase-l1");
+  const cl2    = cprop("--phase-l2");
+  const cl3    = cprop("--phase-l3");
+
+  const ctx = neutralCtx;
+  ctx.clearRect(0, 0, W, H);
+
+  // Adaptive outer ring: smallest 5 V multiple ≥ max(5, 2 × magnitude).
+  const maxRef = Math.max(5, Math.ceil(Math.max(mag * 2, 1) / 5) * 5);
+  const R      = Math.min(W, H) * 0.36;   // outer ring radius in px
+  const scale  = R / maxRef;
+
+  // Background rings at 25 %, 50 %, 75 %, 100 % of maxRef.
+  [0.25, 0.5, 0.75, 1.0].forEach(frac => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * frac, 0, 2 * Math.PI);
+    ctx.strokeStyle = cGrid;
+    ctx.lineWidth   = frac === 1.0 ? 1 : 0.75;
+    ctx.setLineDash([]);
+    ctx.stroke();
+  });
+
+  // Spokes every 30°.
+  for (let a = 0; a < 360; a += 30) {
+    const rad = a * Math.PI / 180;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + R * Math.cos(rad), cy - R * Math.sin(rad));
+    ctx.strokeStyle = cGrid;
+    ctx.lineWidth   = 0.5;
+    ctx.stroke();
+  }
+
+  // Outer ring scale label at top-right.
+  ctx.font         = "8px 'JetBrains Mono', monospace";
+  ctx.fillStyle    = cDim;
+  ctx.textAlign    = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`${maxRef} V`, cx + R * Math.cos(Math.PI / 4) + 3,
+                               cy - R * Math.sin(Math.PI / 4));
+  ctx.textBaseline = "alphabetic";
+
+  // Phase direction labels just outside the outer ring.
+  // L1 = 90° (up), L2 = −30° (lower-right), L3 = 210° (lower-left).
+  [
+    { label: "L1", angle: 90,  color: cl1 },
+    { label: "L2", angle: -30, color: cl2 },
+    { label: "L3", angle: 210, color: cl3 },
+  ].forEach(({ label, angle, color }) => {
+    const rad = angle * Math.PI / 180;
+    const lx  = cx + (R + 11) * Math.cos(rad);
+    const ly  = cy - (R + 11) * Math.sin(rad);
+    ctx.font         = "bold 8px 'Inter', sans-serif";
+    ctx.fillStyle    = color;
+    ctx.textAlign    = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, lx, ly);
+  });
+  ctx.textBaseline = "alphabetic";
+
+  // Origin dot.
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
+  ctx.fillStyle = cText;
+  ctx.fill();
+
+  // Neutral offset vector — only draw if magnitude produces a visible length.
+  const vx    = cx + re * scale;
+  const vy    = cy - im * scale;
+  const pxLen = Math.sqrt((vx - cx) ** 2 + (vy - cy) ** 2);
+
+  if (pxLen > 1.5) {
+    // Shaft.
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(vx, vy);
+    ctx.strokeStyle = cN;
+    ctx.lineWidth   = 2;
+    ctx.setLineDash([]);
+    ctx.stroke();
+
+    // Arrowhead.
+    const ang = Math.atan2(cy - vy, vx - cx);
+    const hs  = 6;
+    ctx.beginPath();
+    ctx.moveTo(vx, vy);
+    ctx.lineTo(vx - hs * Math.cos(ang - 0.4), vy + hs * Math.sin(ang - 0.4));
+    ctx.lineTo(vx - hs * Math.cos(ang + 0.4), vy + hs * Math.sin(ang + 0.4));
+    ctx.closePath();
+    ctx.fillStyle = cN;
+    ctx.fill();
+
+    // Magnitude label nudged outward from the tip.
+    const nudge = 0.25;
+    const lx = vx + (vx - cx) * nudge;
+    const ly = vy + (vy - cy) * nudge - 4;
+    ctx.font         = "bold 9px 'JetBrains Mono', monospace";
+    ctx.fillStyle    = cN;
+    ctx.textAlign    = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(`${mag.toFixed(2)} V`, lx, ly);
+    ctx.textBaseline = "alphabetic";
+  } else {
+    // Zero (or negligible) offset — draw a centred label.
+    ctx.font      = "9px 'JetBrains Mono', monospace";
+    ctx.fillStyle = cText;
+    ctx.textAlign = "center";
+    ctx.fillText("balanced", cx, cy + 18);
+  }
 }

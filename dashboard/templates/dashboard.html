@@ -243,16 +243,19 @@
                     <td class="wt-label"><span class="wye-dot wye-dot--l1"></span>L1</td>
                     <td class="wt-val mono" id="wye-v-l1">—</td>
                     <td class="wt-unit">V</td>
+                    <td class="wt-ideal" id="wye-ideal-l1"></td>
                   </tr>
                   <tr>
                     <td class="wt-label"><span class="wye-dot wye-dot--l2"></span>L2</td>
                     <td class="wt-val mono" id="wye-v-l2">—</td>
                     <td class="wt-unit">V</td>
+                    <td class="wt-ideal" id="wye-ideal-l2"></td>
                   </tr>
                   <tr>
                     <td class="wt-label"><span class="wye-dot wye-dot--l3"></span>L3</td>
                     <td class="wt-val mono" id="wye-v-l3">—</td>
                     <td class="wt-unit">V</td>
+                    <td class="wt-ideal" id="wye-ideal-l3"></td>
                   </tr>
                 </tbody>
               </table>
@@ -305,6 +308,10 @@
                   </tr>
                 </tbody>
               </table>
+              <!-- Mini polar diagram showing the neutral shift vector -->
+              <div class="wye-neutral-mini-wrap">
+                <canvas id="wye-neutral-canvas" aria-label="Neutral offset polar diagram"></canvas>
+              </div>
             </div>
           </div><!-- /.wye-stats -->
 

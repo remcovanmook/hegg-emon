@@ -971,6 +971,23 @@ html, body {
 .wye-dot--l13 { background: var(--wye-l13); }
 .wye-dot--l23 { background: var(--wye-l23); }
 
+/**
+ * Container for the mini neutral-offset polar diagram that lives inside the
+ * "Neutral offset" stats group.  Sized as a square so the canvas keeps a
+ * 1:1 aspect ratio regardless of the parent column width.
+ */
+.wye-neutral-mini-wrap {
+  margin-top: 14px;
+  width: 150px;
+  height: 150px;
+}
+
+#wye-neutral-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 /** Responsive: collapse to single column on narrow viewports. */
 @media (max-width: 860px) {
   .wye-layout {
