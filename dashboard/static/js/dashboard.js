@@ -107,6 +107,12 @@ const BASE_OPTS = {
  * @returns {object}
  */
 function makeInlineOpts(tickFmt) {
+  // Read the current grid colour from the CSS custom property so the initial
+  // paint is correct in both light and dark themes without waiting for
+  // recolorCharts() to run.
+  const gridColor = getComputedStyle(document.documentElement)
+    .getPropertyValue("--chart-grid").trim() || "rgba(0,0,0,0.06)";
+
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -116,7 +122,15 @@ function makeInlineOpts(tickFmt) {
       line:  { tension: 0.3, borderWidth: 1.5 },
     },
     scales: {
-      x: { display: false, type: "time" },
+      x: {
+        // display: true so Chart.js renders gridlines at tick positions.
+        // Labels and the border line are hidden — only the grid is visible.
+        display: true,
+        type: "time",
+        ticks: { display: false, maxTicksLimit: 100 },
+        grid:   { color: gridColor },
+        border: { display: false },
+      },
       y: {
         display: true,
         position: "left",
@@ -126,7 +140,7 @@ function makeInlineOpts(tickFmt) {
           font: { size: 9 },
           ...(tickFmt ? { callback: tickFmt } : {}),
         },
-        grid:   { color: "rgba(255,255,255,0.04)" },
+        grid:   { color: gridColor },
         border: { display: false },
       },
     },
@@ -475,7 +489,8 @@ async function loadHistory(hours) {
 
   voltageCharts.forEach((_, i) => updateVoltageAnnotation(i));
   syncChartScales(voltageCharts, voltageExtremes, 2);
-  syncChartScales(currentCharts, currentExtremes, 0.5);
+  // minFloor=0 prevents the current Y axis from going negative.
+  syncChartScales(currentCharts, currentExtremes, 0.5, 0);
 
   applyXAxisConfig(hours);
 
@@ -724,7 +739,8 @@ function appendToCharts(r) {
     if (v < currentExtremes[i].min) currentExtremes[i].min = v;
     if (v > currentExtremes[i].max) currentExtremes[i].max = v;
   });
-  syncChartScales(currentCharts, currentExtremes, 0.5);
+  // minFloor=0 prevents the current Y axis from going negative.
+  syncChartScales(currentCharts, currentExtremes, 0.5, 0);
 
   const cutoff = Date.now() - selectedHours * 3600 * 1000;
   trimOldPoints(powerChart, cutoff);
@@ -821,9 +837,11 @@ function applyXAxisConfig(hours) {
  * comparable on the same scale.
  * @param {import('chart.js').Chart[]} charts
  * @param {{min:number, max:number}[]} perPhaseExtremes
- * @param {number} minPad - Minimum absolute padding on each side.
+ * @param {number} minPad    - Minimum absolute padding on each side.
+ * @param {number} [minFloor=-Infinity] - Hard lower bound for the Y minimum
+ *   (e.g. pass 0 for current charts to prevent the axis dipping below zero).
  */
-function syncChartScales(charts, perPhaseExtremes, minPad) {
+function syncChartScales(charts, perPhaseExtremes, minPad, minFloor = -Infinity) {
   let globalMin = Infinity, globalMax = -Infinity;
   perPhaseExtremes.forEach(e => {
     if (e.min < globalMin) globalMin = e.min;
@@ -832,7 +850,7 @@ function syncChartScales(charts, perPhaseExtremes, minPad) {
   if (!isFinite(globalMin) || !isFinite(globalMax)) return;
   const pad = Math.max(minPad, (globalMax - globalMin) * 0.25);
   charts.forEach(c => {
-    c.options.scales.y.min = globalMin - pad;
+    c.options.scales.y.min = Math.max(minFloor, globalMin - pad);
     c.options.scales.y.max = globalMax + pad;
   });
 }
