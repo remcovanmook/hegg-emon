@@ -121,9 +121,9 @@ def _run_listener(port: int, extra_handlers: List[Callable],
     sock.settimeout(1.0)
     logger.info("UDP socket bound to 0.0.0.0:%d", port)
 
+    global _device_ip
     locked_ip: str = device_ip
     if device_ip:
-        global _device_ip
         _device_ip = device_ip
 
     try:
@@ -145,7 +145,6 @@ def _run_listener(port: int, extra_handlers: List[Callable],
                     continue
             else:
                 locked_ip = src_ip
-                global _device_ip
                 _device_ip = src_ip
                 logger.info("Locked onto Hegg device at %s:%d", src_ip, src_port)
 
