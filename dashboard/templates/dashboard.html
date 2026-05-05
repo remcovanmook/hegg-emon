@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Live energy monitor dashboard for the Hegg device — real-time power, voltage, and current per phase." />
+  <title>Hegg · Energy Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/dashboard.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-mark" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <path d="M16 2L4 16h9l-1 10 12-14h-9l1-10z" fill="currentColor"/>
+          </svg>
+        </div>
+        <span class="logo-text">Hegg</span>
+        <span class="logo-sub">Energy Monitor</span>
+      </div>
+      <div class="connection-status" id="connection-status" role="status" aria-live="polite">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="status-label" id="status-label">Connecting…</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Top row: power summary -->
+    <section class="section" aria-labelledby="power-heading">
+      <h1 id="power-heading" class="section-title">Power</h1>
+      <div class="cards-row">
+        <article class="card card--delivered" id="card-power-delivered">
+          <div class="card-icon" aria-hidden="true">↓</div>
+          <div class="card-label">Delivered</div>
+          <div class="card-value" id="power-delivered">—</div>
+          <div class="card-unit">kW</div>
+          <div class="card-bar-track" aria-hidden="true">
+            <div class="card-bar-fill" id="bar-delivered"></div>
+          </div>
+        </article>
+        <article class="card card--returned" id="card-power-returned">
+          <div class="card-icon" aria-hidden="true">↑</div>
+          <div class="card-label">Returned</div>
+          <div class="card-value" id="power-returned">—</div>
+          <div class="card-unit">kW</div>
+          <div class="card-bar-track" aria-hidden="true">
+            <div class="card-bar-fill" id="bar-returned"></div>
+          </div>
+        </article>
+        <article class="card card--net" id="card-power-net">
+          <div class="card-icon" aria-hidden="true">⚡</div>
+          <div class="card-label">Net</div>
+          <div class="card-value" id="power-net">—</div>
+          <div class="card-unit">kW</div>
+          <div class="card-hint" id="net-hint"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Voltage per phase -->
+    <section class="section" aria-labelledby="voltage-heading">
+      <h2 id="voltage-heading" class="section-title">Voltage</h2>
+      <div class="cards-row cards-row--three">
+        <article class="card card--phase" id="card-v-l1">
+          <div class="phase-badge">L1</div>
+          <div class="card-value" id="voltage-l1">—</div>
+          <div class="card-unit">V</div>
+        </article>
+        <article class="card card--phase" id="card-v-l2">
+          <div class="phase-badge">L2</div>
+          <div class="card-value" id="voltage-l2">—</div>
+          <div class="card-unit">V</div>
+        </article>
+        <article class="card card--phase" id="card-v-l3">
+          <div class="phase-badge">L3</div>
+          <div class="card-value" id="voltage-l3">—</div>
+          <div class="card-unit">V</div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Current per phase -->
+    <section class="section" aria-labelledby="current-heading">
+      <h2 id="current-heading" class="section-title">Current</h2>
+      <div class="cards-row cards-row--three">
+        <article class="card card--phase" id="card-c-l1">
+          <div class="phase-badge">L1</div>
+          <div class="card-value" id="current-l1">—</div>
+          <div class="card-unit">A</div>
+        </article>
+        <article class="card card--phase" id="card-c-l2">
+          <div class="phase-badge">L2</div>
+          <div class="card-value" id="current-l2">—</div>
+          <div class="card-unit">A</div>
+        </article>
+        <article class="card card--phase" id="card-c-l3">
+          <div class="phase-badge">L3</div>
+          <div class="card-value" id="current-l3">—</div>
+          <div class="card-unit">A</div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Sparkline charts -->
+    <section class="section" aria-labelledby="history-heading">
+      <h2 id="history-heading" class="section-title">History <span class="section-hint">(last 60 s)</span></h2>
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-label">Power (kW)</div>
+          <canvas id="chart-power" width="600" height="120" aria-label="Power history chart"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-label">Voltage per phase (V)</div>
+          <canvas id="chart-voltage" width="600" height="120" aria-label="Voltage history chart"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-label">Current per phase (A)</div>
+          <canvas id="chart-current" width="600" height="120" aria-label="Current history chart"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span class="footer-serial" id="device-serial">—</span>
+      <span class="footer-ts" id="last-updated">—</span>
+    </div>
+  </footer>
+
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,368 @@
+/* ============================================================
+   Hegg Energy Dashboard — design system & layout
+   ============================================================ */
+
+/* ── Custom properties (design tokens) ── */
+:root {
+  --bg:          #0d0f14;
+  --surface:     #161a22;
+  --surface-2:   #1e2330;
+  --border:      rgba(255, 255, 255, 0.07);
+
+  --text:        #e8eaf0;
+  --text-muted:  #6b7490;
+  --text-dim:    #3d4460;
+
+  --accent-blue:   #3b82f6;
+  --accent-green:  #22c55e;
+  --accent-amber:  #f59e0b;
+  --accent-red:    #ef4444;
+  --accent-purple: #a855f7;
+
+  --delivered-color: #3b82f6;
+  --returned-color:  #22c55e;
+  --net-color:       #f59e0b;
+
+  --phase-l1: #818cf8;
+  --phase-l2: #38bdf8;
+  --phase-l3: #fb923c;
+
+  --radius:   14px;
+  --radius-sm: 8px;
+  --shadow:   0 4px 24px rgba(0, 0, 0, 0.4);
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 16px;
+  color-scheme: dark;
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+/* ── Header ── */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(13, 15, 20, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-mark {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--accent-amber), var(--accent-red));
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.logo-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+/* ── Connection status indicator ── */
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background var(--transition);
+}
+
+.status-dot.connected    { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); animation: pulse 2s infinite; }
+.status-dot.disconnected { background: var(--accent-red); }
+.status-dot.connecting   { background: var(--accent-amber); animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── Main layout ── */
+.main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+/* ── Section ── */
+.section-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.section-hint {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── Card grid ── */
+.cards-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.cards-row--three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* ── Card ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 24px 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Accent left-edge glow */
+.card--delivered::before { content: ""; position: absolute; inset: 0; border-left: 3px solid var(--delivered-color); border-radius: var(--radius) 0 0 var(--radius); pointer-events: none; }
+.card--returned::before  { content: ""; position: absolute; inset: 0; border-left: 3px solid var(--returned-color);  border-radius: var(--radius) 0 0 var(--radius); pointer-events: none; }
+.card--net::before       { content: ""; position: absolute; inset: 0; border-left: 3px solid var(--net-color);       border-radius: var(--radius) 0 0 var(--radius); pointer-events: none; }
+
+.card-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  margin-bottom: 8px;
+  opacity: 0.6;
+}
+
+.card--delivered .card-icon { color: var(--delivered-color); }
+.card--returned  .card-icon { color: var(--returned-color); }
+.card--net       .card-icon { color: var(--net-color); }
+
+.card-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.card-value {
+  font-size: 2.6rem;
+  font-weight: 700;
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--text);
+  transition: color 0.15s;
+}
+
+.card--delivered .card-value { color: var(--delivered-color); }
+.card--returned  .card-value { color: var(--returned-color); }
+.card--net       .card-value { color: var(--net-color); }
+
+.card-unit {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.card-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* Progress bar inside card */
+.card-bar-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--surface-2);
+  border-radius: 0 0 var(--radius) var(--radius);
+  overflow: hidden;
+}
+
+.card-bar-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0 2px 0 0;
+}
+
+.card--delivered .card-bar-fill { background: linear-gradient(90deg, var(--delivered-color), #60a5fa); }
+.card--returned  .card-bar-fill { background: linear-gradient(90deg, var(--returned-color), #4ade80); }
+
+/* Phase cards */
+.card--phase {
+  padding: 20px;
+  text-align: center;
+}
+
+.phase-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 99px;
+  margin-bottom: 12px;
+}
+
+/* Colour L1/L2/L3 for voltage cards */
+#card-v-l1 .phase-badge, #card-c-l1 .phase-badge {
+  background: rgba(129, 140, 248, 0.15);
+  color: var(--phase-l1);
+}
+#card-v-l2 .phase-badge, #card-c-l2 .phase-badge {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--phase-l2);
+}
+#card-v-l3 .phase-badge, #card-c-l3 .phase-badge {
+  background: rgba(251, 146, 60, 0.15);
+  color: var(--phase-l3);
+}
+
+#card-v-l1 .card-value, #card-c-l1 .card-value { color: var(--phase-l1); }
+#card-v-l2 .card-value, #card-c-l2 .card-value { color: var(--phase-l2); }
+#card-v-l3 .card-value, #card-c-l3 .card-value { color: var(--phase-l3); }
+
+/* ── Sparkline charts ── */
+.charts-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 20px 16px;
+  box-shadow: var(--shadow);
+}
+
+.chart-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.chart-card canvas {
+  width: 100% !important;
+  height: 100px;
+  display: block;
+}
+
+/* ── Footer ── */
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 14px 24px;
+  margin-top: auto;
+}
+
+.footer-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* ── Flash animation for value updates ── */
+@keyframes value-flash {
+  0%   { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.value-updated {
+  animation: value-flash 0.3s ease-out;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .cards-row--three {
+    grid-template-columns: 1fr;
+  }
+
+  .card-value { font-size: 2rem; }
+
+  .main { padding: 20px 16px 48px; gap: 24px; }
+
+  .logo-sub { display: none; }
+}
+
+@media (max-width: 480px) {
+  .cards-row {
+    grid-template-columns: 1fr;
+  }
+}
