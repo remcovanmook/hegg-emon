@@ -357,6 +357,17 @@
       <section class="section" aria-labelledby="usage-elec-heading">
         <h2 id="usage-elec-heading" class="section-title">Electricity Usage</h2>
         <div class="chart-card">
+          <div class="power-card-header">
+            <div class="power-card-headline">
+              <span class="power-direction">Net usage</span>
+              <span class="power-value mono" id="usage-net-val">—</span>
+              <span class="power-unit">kWh</span>
+            </div>
+            <div class="power-card-deltas">
+              <span class="power-delta-in"  id="usage-delta-in"></span>
+              <span class="power-delta-out" id="usage-delta-out"></span>
+            </div>
+          </div>
           <div class="chart-wrapper chart-wrapper--cost">
             <canvas id="chart-usage" aria-label="Hourly electricity usage per tariff"></canvas>
           </div>
@@ -367,12 +378,16 @@
       <section class="section" aria-labelledby="cost-heading">
         <h2 id="cost-heading" class="section-title">Electricity Cost</h2>
         <div class="chart-card">
-          <div class="cost-summary-row">
-            <span class="cost-summary-value cost-import" id="cost-import-total">—</span>
-            <span class="cost-summary-sep">cost</span>
-            <span class="cost-summary-value cost-export" id="cost-export-total">—</span>
-            <span class="cost-summary-sep">revenue &rarr;</span>
-            <span class="cost-summary-value" id="cost-net-total">—</span>
+          <div class="power-card-header">
+            <div class="power-card-headline">
+              <span class="power-direction">Net cost</span>
+              <span class="power-value mono cost-import" id="cost-net-total">—</span>
+              <span class="power-unit">&euro;</span>
+            </div>
+            <div class="power-card-deltas">
+              <span class="power-delta-in"  id="cost-delta-in"></span>
+              <span class="power-delta-out" id="cost-delta-out"></span>
+            </div>
           </div>
           <div class="chart-wrapper chart-wrapper--cost">
             <canvas id="chart-cost" aria-label="Hourly electricity cost"></canvas>
@@ -384,6 +399,16 @@
       <section class="section" aria-labelledby="gas-heading">
         <h2 id="gas-heading" class="section-title">Gas Usage</h2>
         <div class="chart-card">
+          <div class="power-card-header">
+            <div class="power-card-headline">
+              <span class="power-direction">Gas used</span>
+              <span class="power-value mono" id="gas-total-val">—</span>
+              <span class="power-unit">m&sup3;</span>
+            </div>
+            <div class="power-card-deltas">
+              <span class="power-delta-in" id="gas-delta-period"></span>
+            </div>
+          </div>
           <div class="chart-wrapper chart-wrapper--cost">
             <canvas id="chart-gas" aria-label="Hourly gas usage"></canvas>
           </div>

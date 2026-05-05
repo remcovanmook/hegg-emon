@@ -875,20 +875,38 @@ async function loadUsageCharts() {
     costChart.update("none");
   }
 
-  // Compute totals over the displayed period.
-  const totalImport  =  importCost.reduce((a, b) => a + b, 0);
-  const totalExport  = -exportRevenue.reduce((a, b) => a + b, 0);  // revenue is positive
-  const netCost      = totalImport - totalExport;
+  // Period label, matching the format used by loadSummaryDelta.
+  const _label = selectedHours >= 24 ? `${Math.round(selectedHours / 24)}d` : `${selectedHours}h`;
 
-  const importEl = document.getElementById("cost-import-total");
-  const exportEl = document.getElementById("cost-export-total");
-  const netEl    = document.getElementById("cost-net-total");
-  if (importEl) importEl.textContent = `€${totalImport.toFixed(2)}`;
-  if (exportEl) exportEl.textContent = `€${totalExport.toFixed(2)}`;
+  // Usage totals.
+  const totalDel  = d1.reduce((a, b) => a + b, 0) + d2.reduce((a, b) => a + b, 0);
+  const totalRet  = (-r1.reduce((a, b) => a + b, 0)) + (-r2.reduce((a, b) => a + b, 0));
+  const netUsage  = totalDel - totalRet;
+  setText("usage-net-val", netUsage.toFixed(2));
+  const usageDeltaIn  = document.getElementById("usage-delta-in");
+  const usageDeltaOut = document.getElementById("usage-delta-out");
+  if (usageDeltaIn)  usageDeltaIn.textContent  = `↓ ${totalDel.toFixed(2)} kWh / ${_label}`;
+  if (usageDeltaOut) usageDeltaOut.textContent = `↑ ${totalRet.toFixed(2)} kWh / ${_label}`;
+
+  // Cost totals.
+  const totalImport = importCost.reduce((a, b) => a + b, 0);
+  const totalExport = -exportRevenue.reduce((a, b) => a + b, 0);
+  const netCost     = totalImport - totalExport;
+  const netEl       = document.getElementById("cost-net-total");
   if (netEl) {
     netEl.textContent = `€${netCost.toFixed(2)}`;
-    netEl.className   = "cost-summary-value " + (netCost >= 0 ? "cost-net--positive" : "cost-net--negative");
+    netEl.className   = "power-value mono " + (netCost >= 0 ? "cost-import" : "cost-export");
   }
+  const costDeltaIn  = document.getElementById("cost-delta-in");
+  const costDeltaOut = document.getElementById("cost-delta-out");
+  if (costDeltaIn)  costDeltaIn.textContent  = `↓ €${totalImport.toFixed(2)} / ${_label}`;
+  if (costDeltaOut) costDeltaOut.textContent = `↑ €${totalExport.toFixed(2)} / ${_label}`;
+
+  // Gas totals.
+  const totalGas = gas.reduce((a, b) => a + b, 0);
+  setText("gas-total-val", totalGas.toFixed(3));
+  const gasDeltaPeriod = document.getElementById("gas-delta-period");
+  if (gasDeltaPeriod) gasDeltaPeriod.textContent = `${totalGas.toFixed(3)} m³ / ${_label}`;
 }
 
 /* ── SSE ────────────────────────────────────────────────────────────────── */
