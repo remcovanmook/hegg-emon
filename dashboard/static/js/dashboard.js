@@ -1070,10 +1070,12 @@ function drawWyeDiagram(v1, v2, v3) {
     };
   };
 
-  // Phasor tip coordinates (L1=0°, L2=-120°, L3=+120°).
-  const p1 = toXY(v1,    0);
-  const p2 = toXY(v2, -120);
-  const p3 = toXY(v3,  120);
+  // Phasor tip coordinates.
+  // L1 points straight up (90°), with L2 and L3 at −120° increments:
+  //   L1 = 90°, L2 = −30° (lower-right), L3 = 210° (lower-left).
+  const p1 = toXY(v1,  90);
+  const p2 = toXY(v2, -30);
+  const p3 = toXY(v3, 210);
 
   const meanV   = (v1 + v2 + v3) / 3;
   const idealR  = meanV * scale;
