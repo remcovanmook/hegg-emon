@@ -143,7 +143,7 @@ let selectedHours = 24;
 
 let el;
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   el = {
     statusDot:      document.getElementById("status-dot"),
     statusLabel:    document.getElementById("status-label"),
@@ -161,8 +161,8 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   initCharts();
-  loadHistory(selectedHours);
-  loadSummary();
+  await loadHistory(selectedHours);
+  await loadSummary();
   loadDevice();
   connectSSE();
 
@@ -191,9 +191,34 @@ function initCharts() {
   };
   powerOpts.scales.y.title = { display: true, text: "W", color: "#6b7490", font: { size: 11 } };
 
+  // Power chart: net (W); blue above zero = import, green below = export.
+  // segment colours each line segment based on sign of the starting point.
+  // fill: "origin" shades the area between the line and zero.
   powerChart = new Chart(document.getElementById("chart-power"), {
     type: "line",
-    data: { datasets: [makeDataset("Net", COLORS.net, false)] },
+    data: {
+      datasets: [{
+        label: "Net",
+        data: [],
+        borderColor: COLORS.net,           // fallback before first point
+        backgroundColor: "transparent",   // overridden per-segment
+        fill: "origin",
+        parsing: false,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHitRadius: 6,
+        borderWidth: 1.5,
+        segment: {
+          /** Colour each segment based on the sign of its left-hand point. */
+          borderColor: ctx =>
+            ctx.p0.parsed.y >= 0 ? COLORS.delivered : COLORS.returned,
+          backgroundColor: ctx =>
+            ctx.p0.parsed.y >= 0
+              ? COLORS.delivered + "22"
+              : COLORS.returned  + "22",
+        },
+      }],
+    },
     options: powerOpts,
   });
 
