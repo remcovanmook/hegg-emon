@@ -16,7 +16,7 @@ metrics and optional Home Assistant integration.
 ## Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/hegg /opt/hegg
+git clone https://github.com/remcovanmook/hegg-emon /opt/hegg
 cd /opt/hegg
 python3 -m venv .venv
 source .venv/bin/activate

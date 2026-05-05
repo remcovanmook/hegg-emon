@@ -1,6 +1,6 @@
 [Unit]
 Description=Hegg energy monitor — dashboard + Prometheus
-Documentation=https://github.com/YOUR_USERNAME/hegg
+Documentation=https://github.com/remcovanmook/hegg-emon
 After=network-online.target hegg-collector.service
 Wants=network-online.target
 
