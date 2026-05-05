@@ -982,54 +982,34 @@ html, body {
  * Container for the mini neutral-offset polar diagram.
  * Width fills the stats group; aspect-ratio keeps it square.
  */
+
+/**
+ * Flex row inside the Neutral offset group: stat table on the left,
+ * mini polar canvas on the right.
+ */
+.wye-neutral-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+/** Table within the neutral layout: fixed-width, don't grow. */
+.wye-neutral-layout .wye-table {
+  flex: 0 0 auto;
+}
+
+/** Mini polar canvas: square, fixed size, does not shrink. */
 .wye-neutral-mini-wrap {
-  margin-top: 10px;
-  width: 100%;
-  max-width: 200px;
-  aspect-ratio: 1 / 1;
+  flex: 0 0 140px;
+  width: 140px;
+  height: 140px;
 }
 
 #wye-neutral-canvas {
   width: 100%;
   height: 100%;
   display: block;
-}
-
-/**
- * Compact horizontal metric strip below the mini neutral canvas.
- * Shows magnitude, angle, and imbalance in a single row.
- */
-.wye-neutral-compact {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-top: 8px;
-}
-
-.wnc-item {
-  display: flex;
-  align-items: baseline;
-  gap: 3px;
-}
-
-.wnc-label {
-  font-size: 0.62rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-}
-
-.wnc-val {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.wnc-unit {
-  font-size: 0.65rem;
-  color: var(--text-muted);
 }
 
 /** Responsive: collapse to single column on narrow viewports. */

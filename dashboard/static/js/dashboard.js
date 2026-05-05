@@ -1396,16 +1396,19 @@ function updateWyeDiagram(v1, v2, v3) {
 
   /**
    * Set a phase-voltage IEC delta cell.
-   * Positive = above 230 V (green), negative = below (red).
+   * Shows the absolute deviation from 230 V and the percentage in parentheses.
+   * Positive = above nominal (green), negative = below (red).
    * @param {string} id
    * @param {number} v
    */
   const setPhaseIdeal = (id, v) => {
     const e = document.getElementById(id);
     if (!e) return;
-    const delta = v - IEC_NOM;
-    const sign  = delta >= 0 ? "+" : "";
-    e.textContent = `${sign}${delta.toFixed(1)} V vs 230`;
+    const delta   = v - IEC_NOM;
+    const pct     = (delta / IEC_NOM) * 100;
+    const sign    = delta >= 0 ? "+" : "";
+    const pctSign = pct   >= 0 ? "+" : "";
+    e.textContent = `${sign}${delta.toFixed(1)} V vs IEC (${pctSign}${pct.toFixed(1)}%)`;
     e.className   = `wt-ideal ${delta >= 0 ? "wt-ideal--pos" : "wt-ideal--neg"}`;
   };
   setPhaseIdeal("wye-ideal-l1", v1);

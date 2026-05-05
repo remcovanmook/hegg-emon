@@ -289,26 +289,28 @@
 
             <div class="wye-stats-group">
               <div class="wye-stats-header">Neutral offset</div>
-              <!-- Mini polar diagram: magnitude and direction of neutral shift -->
-              <div class="wye-neutral-mini-wrap">
-                <canvas id="wye-neutral-canvas" aria-label="Neutral offset polar diagram"></canvas>
-              </div>
-              <!-- Compact metric strip: magnitude, angle, imbalance -->
-              <div class="wye-neutral-compact">
-                <div class="wnc-item">
-                  <span class="wnc-label">Mag</span>
-                  <span class="wnc-val" id="wye-neutral-mag">—</span>
-                  <span class="wnc-unit">V</span>
-                </div>
-                <div class="wnc-item">
-                  <span class="wnc-label">Angle</span>
-                  <span class="wnc-val" id="wye-neutral-ang">—</span>
-                  <span class="wnc-unit">°</span>
-                </div>
-                <div class="wnc-item">
-                  <span class="wnc-label">Imbal</span>
-                  <span class="wnc-val" id="wye-imbalance">—</span>
-                  <span class="wnc-unit">%</span>
+              <div class="wye-neutral-layout">
+                <table class="wye-table">
+                  <tbody>
+                    <tr>
+                      <td class="wt-label">Magnitude</td>
+                      <td class="wt-val" id="wye-neutral-mag">—</td>
+                      <td class="wt-unit">V</td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label">Angle</td>
+                      <td class="wt-val" id="wye-neutral-ang">—</td>
+                      <td class="wt-unit">°</td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label">Imbalance</td>
+                      <td class="wt-val" id="wye-imbalance">—</td>
+                      <td class="wt-unit">%</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div class="wye-neutral-mini-wrap">
+                  <canvas id="wye-neutral-canvas" aria-label="Neutral offset polar diagram"></canvas>
                 </div>
               </div>
             </div>
