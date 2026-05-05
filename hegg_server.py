@@ -41,6 +41,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("hegg_server")
 
+from hegg.store import default_db_path  # noqa: E402
+
 
 def _prometheus_poll_loop(store, exporter, interval: float = 2.0) -> None:
     """Poll the store for the latest reading and update Prometheus gauges.
@@ -73,7 +75,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--http-port",       type=int, default=int(os.getenv("HEGG_HTTP_PORT",       "8080")))
     p.add_argument("--prometheus-port", type=int, default=int(os.getenv("HEGG_PROMETHEUS_PORT", "9101")))
     p.add_argument("--device-ip",  default=os.getenv("HEGG_DEVICE_IP", ""))
-    p.add_argument("--db",         default=os.getenv("HEGG_DB", "hegg.db"))
+    p.add_argument("--db",         default=default_db_path())
     p.add_argument("--mqtt-host",  default=os.getenv("HEGG_MQTT_HOST", ""))
     p.add_argument("--mqtt-port",  type=int, default=int(os.getenv("HEGG_MQTT_PORT", "1883")))
     p.add_argument("--mqtt-user",  default=os.getenv("HEGG_MQTT_USER", ""))

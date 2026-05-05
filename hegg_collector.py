@@ -30,7 +30,7 @@ import os
 import socket
 
 from hegg.reading import HeggReading
-from hegg.store import HeggStore
+from hegg.store import HeggStore, default_db_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -142,7 +142,7 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--db",
-        default=os.getenv("HEGG_DB", "hegg.db"),
+        default=default_db_path(),
         help="Path to the SQLite database (default: hegg.db)",
     )
     p.add_argument("--debug", action="store_true")

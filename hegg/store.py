@@ -31,8 +31,45 @@ from typing import Union
 
 from hegg.reading import HeggReading
 
+import os
+
 #: Number of days of raw readings to retain.
 RETENTION_DAYS: int = 7
+
+
+def default_db_path() -> str:
+    """Return a sensible default path for the SQLite database.
+
+    Resolution order:
+
+    1. ``HEGG_DB`` environment variable, if set.
+    2. ``/var/lib/hegg/hegg.db`` if the directory exists and is writable
+       (i.e. we are running as the ``hegg`` system user on a production host).
+    3. ``db/hegg.db`` relative to the repository root (present working
+       directory) if that directory exists — useful for local dev.
+    4. ``hegg.db`` in the current working directory as a last resort.
+
+    Returns:
+        Absolute or relative path string suitable for :class:`HeggStore`.
+    """
+    # 1. Explicit environment override.
+    env = os.getenv("HEGG_DB")
+    if env:
+        return env
+
+    # 2. Production system path.
+    system_dir = "/var/lib/hegg"
+    if os.path.isdir(system_dir) and os.access(system_dir, os.W_OK):
+        return os.path.join(system_dir, "hegg.db")
+
+    # 3. db/ subdirectory in the current working directory (dev layout).
+    db_dir = os.path.join(os.getcwd(), "db")
+    if os.path.isdir(db_dir):
+        return os.path.join(db_dir, "hegg.db")
+
+    # 4. Flat file next to wherever we are running from.
+    return "hegg.db"
+
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS readings (

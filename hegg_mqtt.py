@@ -31,7 +31,7 @@ import time
 from datetime import datetime
 
 from hegg.reading import HeggReading
-from hegg.store import HeggStore
+from hegg.store import HeggStore, default_db_path
 from hegg.ha_publisher import HAPublisher, MQTTConfig
 
 logging.basicConfig(
@@ -94,7 +94,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--mqtt-port", type=int, default=int(os.getenv("HEGG_MQTT_PORT", "1883")))
     p.add_argument("--mqtt-user", default=os.getenv("HEGG_MQTT_USER", ""))
     p.add_argument("--mqtt-pass", default=os.getenv("HEGG_MQTT_PASS", ""))
-    p.add_argument("--db", default=os.getenv("HEGG_DB", "hegg.db"), help="SQLite database path")
+    p.add_argument("--db", default=default_db_path(), help="SQLite database path")
     p.add_argument("--debug", action="store_true")
     return p.parse_args()
 

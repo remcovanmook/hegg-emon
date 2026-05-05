@@ -45,7 +45,7 @@ from typing import Iterator, Optional
 
 from flask import Flask, Response, jsonify, render_template, request
 
-from hegg.store import HeggStore
+from hegg.store import HeggStore, default_db_path
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +218,7 @@ def _prune_loop(store: HeggStore, interval_s: int = 3600) -> None:
             logger.exception("Store prune failed")
 
 
-def create_app(db_path: str = "hegg.db") -> Flask:
+def create_app(db_path: str = "") -> Flask:
     """Initialise the store and return the configured Flask app.
 
     Starts one background thread (prune loop).  The UDP collector is a
@@ -226,13 +226,14 @@ def create_app(db_path: str = "hegg.db") -> Flask:
     data to appear.
 
     Args:
-        db_path: Path to the shared SQLite database file.
+        db_path: Path to the shared SQLite database file.  Resolved via
+                 :func:`~hegg.store.default_db_path` if not provided.
 
     Returns:
         Configured :class:`flask.Flask` instance.
     """
     global _store
-    _store = HeggStore(path=db_path)
+    _store = HeggStore(path=db_path or default_db_path())
 
     threading.Thread(
         target=_prune_loop,
@@ -249,7 +250,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     p = argparse.ArgumentParser(description="Hegg dashboard server")
     p.add_argument("--http-port", type=int, default=8080)
-    p.add_argument("--db", default="hegg.db")
+    p.add_argument("--db", default=default_db_path())
     p.add_argument("--debug", action="store_true")
     args = p.parse_args()
     create_app(db_path=args.db)
