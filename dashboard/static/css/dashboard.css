@@ -358,6 +358,7 @@ html, body {
 }
 .leg.delivered { background: var(--delivered-color); }
 .leg.returned  { background: var(--returned-color); }
+.leg.net       { background: var(--net-color); }
 .leg.l1 { background: var(--phase-l1); }
 .leg.l2 { background: var(--phase-l2); }
 .leg.l3 { background: var(--phase-l3); }
@@ -368,9 +369,84 @@ html, body {
   width: 100%;
 }
 
+/* Compact inline chart inside a phase card */
+.chart-wrapper--inline {
+  height: 72px;
+  margin-top: 14px;
+}
+
 .chart-wrapper canvas {
   /* Let Chart.js control dimensions — no height here. */
   display: block;
+}
+
+/* Voltage phase cards with inline chart */
+.card--with-chart {
+  text-align: left;
+}
+
+.phase-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.phase-value-group {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.card--with-chart .phase-badge {
+  margin-bottom: 0;
+}
+
+/* Four-column totals row */
+.cards-row--four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 900px) {
+  .cards-row--four { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Cumulative total cards */
+.card--total .card-value {
+  font-size: 1.6rem;
+}
+
+/* Device info card */
+.card--device {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.device-info {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.device-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  gap: 8px;
+}
+
+.device-key {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.device-val {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  text-align: right;
+  word-break: break-all;
 }
 
 /* ── Footer ── */

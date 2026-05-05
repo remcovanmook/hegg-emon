@@ -59,6 +59,15 @@ _store: Optional[HeggStore] = None
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+#: Fields present in every standard 1-second reading packet.
+_KNOWN_FIELDS = {
+    "timestamp", "serial",
+    "power_delivered", "power_returned",
+    "voltage_l1", "voltage_l2", "voltage_l3",
+    "current_l1", "current_l2", "current_l3",
+}
+
+
 def _push_reading(reading: HeggReading) -> None:
     """Persist a reading and record it as the latest.
 
@@ -121,9 +130,31 @@ def _run_listener(port: int, extra_handlers: List[Callable]) -> None:
 
             try:
                 payload = json.loads(data.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                logger.warning("Dropping undecodable packet from %s: %s", addr, exc)
+                continue
+
+            # Route by packet type.
+            if "energy_delivered_tariff1" in payload:
+                # Minute-summary packet.
+                if _store is not None:
+                    try:
+                        _store.insert_summary(payload)
+                    except Exception:
+                        logger.exception("Summary insert failed")
+                continue
+
+            # Standard 1-second reading.
+            try:
                 reading = HeggReading.from_dict(payload)
-            except (json.JSONDecodeError, KeyError, ValueError) as exc:
-                logger.warning("Dropping malformed packet from %s: %s", addr, exc)
+            except (KeyError, ValueError) as exc:
+                # Unknown packet structure — store raw for inspection.
+                logger.info("Unknown packet from %s: fields=%s", addr, sorted(payload.keys()))
+                if _store is not None:
+                    try:
+                        _store.insert_event(payload)
+                    except Exception:
+                        pass
                 continue
 
             # The device sends 2-3 identical packets per second; deduplicate.
@@ -171,6 +202,26 @@ def _prune_loop(store: HeggStore, interval_s: int = 3600) -> None:
 def index() -> str:
     """Render the main dashboard page."""
     return render_template("dashboard.html")
+
+
+@app.route("/api/summary/latest")
+def api_summary_latest() -> Response:
+    """Return the most recent minute-summary packet, or 204."""
+    if _store is None:
+        return Response(status=503)
+    summary = _store.latest_summary()
+    if not summary:
+        return Response(status=204)
+    return jsonify(summary)
+
+
+@app.route("/api/events")
+def api_events() -> Response:
+    """Return recent unknown/raw event packets (newest first)."""
+    if _store is None:
+        return jsonify([])
+    limit = int(request.args.get("limit", 20))
+    return jsonify(_store.query_events(limit=limit))
 
 
 @app.route("/api/latest")

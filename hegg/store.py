@@ -22,6 +22,7 @@ older than :data:`RETENTION_DAYS`.  The unified launcher does this on a
 background timer.
 """
 
+import json
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
@@ -48,6 +49,31 @@ CREATE TABLE IF NOT EXISTS readings (
     current_l3 REAL    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ts ON readings (ts);
+
+CREATE TABLE IF NOT EXISTS events (
+    id     INTEGER PRIMARY KEY,
+    ts     INTEGER NOT NULL,
+    serial TEXT    NOT NULL,
+    raw    TEXT    NOT NULL,
+    UNIQUE (ts, serial)
+);
+CREATE INDEX IF NOT EXISTS idx_events_ts ON events (ts);
+
+CREATE TABLE IF NOT EXISTS summaries (
+    id                  INTEGER PRIMARY KEY,
+    ts                  INTEGER NOT NULL UNIQUE,
+    serial              TEXT    NOT NULL,
+    sw_version          INTEGER,
+    equipment_id        TEXT,
+    model               TEXT,
+    wifi_rssi           INTEGER,
+    energy_delivered_t1 REAL,
+    energy_delivered_t2 REAL,
+    energy_returned_t1  REAL,
+    energy_returned_t2  REAL,
+    gas_delivered       REAL
+);
+CREATE INDEX IF NOT EXISTS idx_summaries_ts ON summaries (ts);
 """
 
 _INSERT = """
@@ -200,8 +226,116 @@ class HeggStore:
             })
         return result
 
+    def insert_event(self, data: dict) -> None:
+        """Store a raw event packet (e.g. a minute-summary) as JSON.
+
+        Duplicate (ts, serial) pairs are silently ignored.
+
+        Args:
+            data: Full parsed packet dict.  Must contain ``timestamp`` and
+                  ``serial`` keys.
+        """
+        ts_str = data.get("timestamp", "")
+        try:
+            ts_dt = datetime.fromisoformat(ts_str.rstrip("Z") + "+00:00")
+            ts_ms = int(ts_dt.timestamp() * 1000)
+        except (ValueError, AttributeError):
+            ts_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+        serial = data.get("serial", "unknown")
+        with self._write_lock:
+            self._conn().execute(
+                "INSERT OR IGNORE INTO events (ts, serial, raw) VALUES (?,?,?)",
+                (ts_ms, serial, json.dumps(data)),
+            )
+            self._conn().commit()
+
+    def query_events(self, limit: int = 50) -> list:
+        """Return recent event packets, newest first.
+
+        Args:
+            limit: Maximum number of rows to return.
+
+        Returns:
+            List of raw dicts (as stored), newest first.
+        """
+        rows = self._conn().execute(
+            "SELECT raw FROM events ORDER BY ts DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [json.loads(r[0]) for r in rows]
+
+    def insert_summary(self, data: dict) -> None:
+        """Store a minute-summary packet into the ``summaries`` table.
+
+        Duplicate timestamps are ignored (UNIQUE constraint).
+
+        Args:
+            data: Parsed summary packet dict.
+        """
+        ts_str = data.get("timestamp", "")
+        try:
+            ts_dt = datetime.fromisoformat(ts_str.rstrip("Z") + "+00:00")
+            ts_ms = int(ts_dt.timestamp() * 1000)
+        except (ValueError, AttributeError):
+            ts_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+        with self._write_lock:
+            self._conn().execute(
+                """
+                INSERT OR IGNORE INTO summaries
+                    (ts, serial, sw_version, equipment_id, model, wifi_rssi,
+                     energy_delivered_t1, energy_delivered_t2,
+                     energy_returned_t1, energy_returned_t2, gas_delivered)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    ts_ms,
+                    data.get("serial"),
+                    data.get("swVersion"),
+                    data.get("equipment_id"),
+                    data.get("model"),
+                    data.get("wifiRSSI"),
+                    data.get("energy_delivered_tariff1"),
+                    data.get("energy_delivered_tariff2"),
+                    data.get("energy_returned_tariff1"),
+                    data.get("energy_returned_tariff2"),
+                    data.get("gas_delivered"),
+                ),
+            )
+            self._conn().commit()
+
+    def latest_summary(self) -> dict:
+        """Return the most recent summary packet, or an empty dict.
+
+        Returns:
+            Dict with summary fields, or ``{}`` if no summary has been stored.
+        """
+        row = self._conn().execute(
+            """
+            SELECT ts, serial, sw_version, equipment_id, model, wifi_rssi,
+                   energy_delivered_t1, energy_delivered_t2,
+                   energy_returned_t1, energy_returned_t2, gas_delivered
+            FROM summaries ORDER BY ts DESC LIMIT 1
+            """
+        ).fetchone()
+        if row is None:
+            return {}
+        return {
+            "timestamp":           datetime.fromtimestamp(row[0] / 1000, tz=timezone.utc).isoformat(),
+            "serial":              row[1],
+            "sw_version":          row[2],
+            "equipment_id":        row[3],
+            "model":               row[4],
+            "wifi_rssi":           row[5],
+            "energy_delivered_t1": row[6],
+            "energy_delivered_t2": row[7],
+            "energy_returned_t1":  row[8],
+            "energy_returned_t2":  row[9],
+            "gas_delivered":       row[10],
+        }
+
     def prune(self) -> int:
-        """Delete readings older than :data:`RETENTION_DAYS`.
+        """Delete readings and events older than :data:`RETENTION_DAYS`.
 
         Returns:
             Number of rows deleted.
@@ -211,6 +345,8 @@ class HeggStore:
         )
         with self._write_lock:
             conn = self._conn()
-            cur = conn.execute("DELETE FROM readings WHERE ts < ?", (cutoff_ms,))
+            cur1 = conn.execute("DELETE FROM readings WHERE ts < ?", (cutoff_ms,))
+            cur2 = conn.execute("DELETE FROM events WHERE ts < ?", (cutoff_ms,))
+            cur3 = conn.execute("DELETE FROM summaries WHERE ts < ?", (cutoff_ms,))
             conn.commit()
-        return cur.rowcount
+        return cur1.rowcount + cur2.rowcount + cur3.rowcount

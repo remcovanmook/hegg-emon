@@ -64,43 +64,53 @@
             <div class="card-bar-fill" id="bar-returned"></div>
           </div>
         </article>
-        <article class="card card--net">
-          <div class="card-icon" aria-hidden="true">⚡</div>
-          <div class="card-label">Net</div>
-          <div class="card-value" id="power-net">—</div>
-          <div class="card-unit">kW</div>
-          <div class="card-hint" id="net-hint"></div>
-        </article>
       </div>
       <div class="chart-card">
-        <div class="chart-label">Power over time — <span class="chart-legend"><span class="leg delivered"></span>Delivered <span class="leg returned"></span>Returned</span></div>
+        <div class="chart-label">Power over time — <span class="chart-legend"><span class="leg delivered"></span>Delivered <span class="leg returned"></span>Returned <span class="leg net"></span>Net</span></div>
         <div class="chart-wrapper"><canvas id="chart-power" aria-label="Power history"></canvas></div>
       </div>
     </section>
 
-    <!-- ── Voltage ── -->
+    <!-- ── Voltage (inline charts per phase) ── -->
     <section class="section" aria-labelledby="voltage-heading">
       <h2 id="voltage-heading" class="section-title">Voltage</h2>
       <div class="cards-row cards-row--three">
-        <article class="card card--phase" id="card-v-l1">
-          <div class="phase-badge">L1</div>
-          <div class="card-value" id="voltage-l1">—</div>
-          <div class="card-unit">V</div>
+        <article class="card card--phase card--with-chart" id="card-v-l1">
+          <div class="phase-row">
+            <div class="phase-badge">L1</div>
+            <div class="phase-value-group">
+              <div class="card-value" id="voltage-l1">—</div>
+              <div class="card-unit">V</div>
+            </div>
+          </div>
+          <div class="chart-wrapper chart-wrapper--inline">
+            <canvas id="chart-v-l1" aria-label="L1 voltage history"></canvas>
+          </div>
         </article>
-        <article class="card card--phase" id="card-v-l2">
-          <div class="phase-badge">L2</div>
-          <div class="card-value" id="voltage-l2">—</div>
-          <div class="card-unit">V</div>
+        <article class="card card--phase card--with-chart" id="card-v-l2">
+          <div class="phase-row">
+            <div class="phase-badge">L2</div>
+            <div class="phase-value-group">
+              <div class="card-value" id="voltage-l2">—</div>
+              <div class="card-unit">V</div>
+            </div>
+          </div>
+          <div class="chart-wrapper chart-wrapper--inline">
+            <canvas id="chart-v-l2" aria-label="L2 voltage history"></canvas>
+          </div>
         </article>
-        <article class="card card--phase" id="card-v-l3">
-          <div class="phase-badge">L3</div>
-          <div class="card-value" id="voltage-l3">—</div>
-          <div class="card-unit">V</div>
+        <article class="card card--phase card--with-chart" id="card-v-l3">
+          <div class="phase-row">
+            <div class="phase-badge">L3</div>
+            <div class="phase-value-group">
+              <div class="card-value" id="voltage-l3">—</div>
+              <div class="card-unit">V</div>
+            </div>
+          </div>
+          <div class="chart-wrapper chart-wrapper--inline">
+            <canvas id="chart-v-l3" aria-label="L3 voltage history"></canvas>
+          </div>
         </article>
-      </div>
-      <div class="chart-card">
-        <div class="chart-label">Voltage per phase — <span class="chart-legend"><span class="leg l1"></span>L1 <span class="leg l2"></span>L2 <span class="leg l3"></span>L3</span></div>
-        <div class="chart-wrapper"><canvas id="chart-voltage" aria-label="Voltage history"></canvas></div>
       </div>
     </section>
 
@@ -127,6 +137,39 @@
       <div class="chart-card">
         <div class="chart-label">Current per phase — <span class="chart-legend"><span class="leg l1"></span>L1 <span class="leg l2"></span>L2 <span class="leg l3"></span>L3</span></div>
         <div class="chart-wrapper"><canvas id="chart-current" aria-label="Current history"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ── Energy & Gas totals (from minute summary) ── -->
+    <section class="section" aria-labelledby="totals-heading">
+      <h2 id="totals-heading" class="section-title">Cumulative</h2>
+      <div class="cards-row cards-row--four">
+        <article class="card card--total">
+          <div class="card-icon" aria-hidden="true">↓</div>
+          <div class="card-label">Energy In</div>
+          <div class="card-value" id="energy-in">—</div>
+          <div class="card-unit">kWh</div>
+        </article>
+        <article class="card card--total">
+          <div class="card-icon" aria-hidden="true">↑</div>
+          <div class="card-label">Energy Out</div>
+          <div class="card-value" id="energy-out">—</div>
+          <div class="card-unit">kWh</div>
+        </article>
+        <article class="card card--total">
+          <div class="card-icon" aria-hidden="true">🔥</div>
+          <div class="card-label">Gas</div>
+          <div class="card-value" id="gas-delivered">—</div>
+          <div class="card-unit">m³</div>
+        </article>
+        <article class="card card--total card--device">
+          <div class="card-label">Device</div>
+          <div class="device-info">
+            <div class="device-row"><span class="device-key">Model</span><span class="device-val" id="device-model">—</span></div>
+            <div class="device-row"><span class="device-key">WiFi</span><span class="device-val" id="device-rssi">—</span></div>
+            <div class="device-row"><span class="device-key">SW</span><span class="device-val" id="device-sw">—</span></div>
+          </div>
+        </article>
       </div>
     </section>
 
