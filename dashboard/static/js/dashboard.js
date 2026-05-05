@@ -163,7 +163,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     currentL1:      document.getElementById("current-l1"),
     currentL2:      document.getElementById("current-l2"),
     currentL3:      document.getElementById("current-l3"),
-    lastUpdated:    document.getElementById("last-updated"),
     historyRange:   document.getElementById("history-range"),
   };
 
@@ -521,8 +520,6 @@ function applyReading(r) {
   setValue(el.currentL1, fmt1(r.current_l1));
   setValue(el.currentL2, fmt1(r.current_l2));
   setValue(el.currentL3, fmt1(r.current_l3));
-
-  if (el.lastUpdated) el.lastUpdated.textContent = new Date(r.timestamp).toLocaleTimeString();
 
   appendToCharts(r);
 }
