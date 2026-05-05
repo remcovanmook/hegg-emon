@@ -116,9 +116,15 @@
       <h2 id="power-heading" class="section-title">Power</h2>
       <div class="chart-card" id="power-display">
         <div class="power-card-header">
-          <span class="power-direction" id="power-direction">—</span>
-          <span class="power-value mono" id="power-net-val">—</span>
-          <span class="power-unit">W</span>
+          <div class="power-card-headline">
+            <span class="power-direction" id="power-direction">—</span>
+            <span class="power-value mono" id="power-net-val">—</span>
+            <span class="power-unit">W</span>
+          </div>
+          <div class="power-card-deltas">
+            <span class="power-delta-in" id="power-delta-in"></span>
+            <span class="power-delta-out" id="power-delta-out"></span>
+          </div>
         </div>
         <div class="chart-wrapper"><canvas id="chart-power" aria-label="Net power history"></canvas></div>
       </div>

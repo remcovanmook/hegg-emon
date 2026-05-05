@@ -323,9 +323,15 @@ html, body {
 /** Compact header row: direction label + large watt value inline. */
 .power-card-header {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.power-card-headline {
+  display: flex;
   align-items: baseline;
   gap: 10px;
-  margin-bottom: 14px;
 }
 
 .power-direction {
@@ -358,6 +364,19 @@ html, body {
   color: var(--text-muted);
   font-weight: 500;
 }
+
+/** In/out kWh deltas for the selected history window. */
+.power-card-deltas {
+  display: flex;
+  gap: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: "JetBrains Mono", monospace;
+  min-height: 1.1em;
+}
+
+.power-delta-in  { color: var(--delivered-color); }
+.power-delta-out { color: var(--returned-color); }
 
 /* ── Section ── */
 .section-title {

@@ -157,6 +157,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     powerDisplay:   document.getElementById("power-display"),
     powerDirection: document.getElementById("power-direction"),
     powerNetVal:    document.getElementById("power-net-val"),
+    powerDeltaIn:   document.getElementById("power-delta-in"),
+    powerDeltaOut:  document.getElementById("power-delta-out"),
     voltageL1:      document.getElementById("voltage-l1"),
     voltageL2:      document.getElementById("voltage-l2"),
     voltageL3:      document.getElementById("voltage-l3"),
@@ -325,9 +327,9 @@ async function loadHistory(hours) {
     });
   });
 
-  voltageCharts.forEach((_, i) => updateInlineScale(voltageCharts[i], voltageExtremes[i], 2));
-  currentCharts.forEach((_, i) => updateInlineScale(currentCharts[i], currentExtremes[i], 0.5));
   voltageCharts.forEach((_, i) => updateVoltageAnnotation(i));
+  syncChartScales(voltageCharts, voltageExtremes, 2);
+  syncChartScales(currentCharts, currentExtremes, 0.5);
 
   powerChart.update();
   voltageCharts.forEach(c => c.update());
@@ -392,6 +394,10 @@ async function loadSummaryDelta(hours) {
   const outTotal = (d.energy_returned_t1  ?? 0) + (d.energy_returned_t2  ?? 0);
   setEnergyDelta("energy-in-total-delta",  inTotal,  label, "kWh");
   setEnergyDelta("energy-out-total-delta", outTotal, label, "kWh");
+
+  // Power card inline deltas
+  if (el.powerDeltaIn)  el.powerDeltaIn.textContent  = `↓ ${inTotal.toFixed(2)} kWh / ${label}`;
+  if (el.powerDeltaOut) el.powerDeltaOut.textContent = `↑ ${outTotal.toFixed(2)} kWh / ${label}`;
 
   // Per-tariff breakdown
   setEnergyDelta("energy-in-t1-delta",  d.energy_delivered_t1, label, "kWh");
@@ -550,16 +556,16 @@ function appendToCharts(r) {
     voltageCharts[i].data.datasets[0].data.push({ x: ts, y: v });
     if (v < voltageExtremes[i].min) { voltageExtremes[i].min = v; updateVoltageAnnotation(i); }
     if (v > voltageExtremes[i].max) { voltageExtremes[i].max = v; updateVoltageAnnotation(i); }
-    updateInlineScale(voltageCharts[i], voltageExtremes[i], 2);
   });
+  syncChartScales(voltageCharts, voltageExtremes, 2);
 
   // Current
   [r.current_l1, r.current_l2, r.current_l3].forEach((v, i) => {
     currentCharts[i].data.datasets[0].data.push({ x: ts, y: v });
     if (v < currentExtremes[i].min) currentExtremes[i].min = v;
     if (v > currentExtremes[i].max) currentExtremes[i].max = v;
-    updateInlineScale(currentCharts[i], currentExtremes[i], 0.5);
   });
+  syncChartScales(currentCharts, currentExtremes, 0.5);
 
   const cutoff = Date.now() - selectedHours * 3600 * 1000;
   trimOldPoints(powerChart, cutoff);
@@ -578,6 +584,28 @@ function trimOldPoints(chart, cutoff) {
 }
 
 /* ── Scale helpers ──────────────────────────────────────────────────────── */
+
+/**
+ * Compute the union Y-axis range across all per-phase extremes and apply the
+ * same min/max to every chart in the group, keeping L1/L2/L3 visually
+ * comparable on the same scale.
+ * @param {import('chart.js').Chart[]} charts
+ * @param {{min:number, max:number}[]} perPhaseExtremes
+ * @param {number} minPad - Minimum absolute padding on each side.
+ */
+function syncChartScales(charts, perPhaseExtremes, minPad) {
+  let globalMin = Infinity, globalMax = -Infinity;
+  perPhaseExtremes.forEach(e => {
+    if (e.min < globalMin) globalMin = e.min;
+    if (e.max > globalMax) globalMax = e.max;
+  });
+  if (!isFinite(globalMin) || !isFinite(globalMax)) return;
+  const pad = Math.max(minPad, (globalMax - globalMin) * 0.25);
+  charts.forEach(c => {
+    c.options.scales.y.min = globalMin - pad;
+    c.options.scales.y.max = globalMax + pad;
+  });
+}
 
 /**
  * Set the Y scale min/max with padding so data lines are never flush with
