@@ -903,16 +903,23 @@ html, body {
 /** Stat table inside each group. */
 .wye-table {
   border-collapse: collapse;
+  /*
+   * fixed layout + explicit column widths below ensure the three independent
+   * tables (Phase voltages, Line differentials) align their columns visually.
+   */
+  table-layout: fixed;
   width: 100%;
 }
 
 .wye-table td {
-  padding: 3px 8px 3px 0;
+  padding: 3px 0;
   vertical-align: middle;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/** Phase/line label column. */
+/** Phase/line label column — fixed width so all tables align. */
 .wt-label {
   font-size: 0.72rem;
   font-weight: 600;
@@ -920,36 +927,36 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 72px;
+  width: 80px;
 }
 
-/** Numeric value column. */
+/** Numeric value column — right-aligned, fixed width. */
 .wt-val {
   font-family: "JetBrains Mono", monospace;
   font-size: 1.0rem;
   font-weight: 700;
   color: var(--text);
   text-align: right;
-  min-width: 64px;
+  width: 68px;
 }
 
-/** Unit column. */
+/** Unit column — narrow, left-padded. */
 .wt-unit {
   font-size: 0.72rem;
   color: var(--text-muted);
-  padding-left: 4px;
+  padding-left: 6px;
+  width: 24px;
 }
 
 /**
- * Ideal/delta annotation column (shown for line differentials).
- * Positive delta = above ideal (√3 * mean); negative = below.
+ * Delta/annotation column — fills remaining space.
+ * Positive delta = above reference (green), negative = below (red).
  */
 .wt-ideal {
   font-family: "JetBrains Mono", monospace;
   font-size: 0.68rem;
   color: var(--text-dim);
-  padding-left: 8px;
-  min-width: 72px;
+  padding-left: 10px;
 }
 
 .wt-ideal--pos { color: var(--accent-green); }
@@ -972,20 +979,57 @@ html, body {
 .wye-dot--l23 { background: var(--wye-l23); }
 
 /**
- * Container for the mini neutral-offset polar diagram that lives inside the
- * "Neutral offset" stats group.  Sized as a square so the canvas keeps a
- * 1:1 aspect ratio regardless of the parent column width.
+ * Container for the mini neutral-offset polar diagram.
+ * Width fills the stats group; aspect-ratio keeps it square.
  */
 .wye-neutral-mini-wrap {
-  margin-top: 14px;
-  width: 150px;
-  height: 150px;
+  margin-top: 10px;
+  width: 100%;
+  max-width: 200px;
+  aspect-ratio: 1 / 1;
 }
 
 #wye-neutral-canvas {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/**
+ * Compact horizontal metric strip below the mini neutral canvas.
+ * Shows magnitude, angle, and imbalance in a single row.
+ */
+.wye-neutral-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+}
+
+.wnc-item {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.wnc-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.wnc-val {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.wnc-unit {
+  font-size: 0.65rem;
+  color: var(--text-muted);
 }
 
 /** Responsive: collapse to single column on narrow viewports. */
