@@ -7,13 +7,14 @@ SQLite is the shared data bus.  One writer, multiple independent readers.
 ```
 Hegg device (UDP broadcast, 1 Hz)
         │
-        ▼
-hegg_collector.py          raw blocking UDP socket → HeggStore.insert()
-        │
-        ▼
-   hegg.db  (SQLite)
-        │
-   ┌────┴──────────────────┬──────────────────────┐
+        ├──────────────────────────────────────────────┐
+        ▼                                              ▼
+hegg_collector.py          raw blocking UDP socket    hegg_mini.py
+        │                  → HeggStore.insert()       UDP → in-process queue
+        ▼                                              │
+   hegg.db  (SQLite)                                  ▼
+        │                                    ThreadingHTTPServer
+   ┌────┴──────────────────┬──────────────────────┐   port 8080
    ▼                       ▼                      ▼
 dashboard/app.py    prometheus_exporter.py    ha_publisher.py
 Flask + SSE         HeggExporter.update()     (not yet wired)
@@ -109,6 +110,41 @@ Contains `MQTTConfig` and `HAPublisher` with HA MQTT discovery and state
 payload logic.  Not yet wired to the store — the polling loop that reads
 new readings from SQLite and publishes to MQTT is the missing piece.
 
+### `hegg_mini.py`
+
+Self-contained minimal server.  Zero external dependencies — Python 3.7+
+standard library only.
+
+Designed for situations where the full stack (Flask, SQLite, Prometheus) is
+unwanted overhead.  Receives UDP broadcasts directly and fans them out to SSE
+clients in the same process — no database involved.
+
+**Data flow:**
+
+```
+UDP packet → udp_listener() thread
+  ├─ reading? → _broadcast_reading() → per-client queue.Queue
+  │                                         └─► /stream SSE response
+  └─ summary? → _latest_summary (in-process dict)
+                     └─► /api/summary/latest, /api/device
+```
+
+**Endpoints** (same API surface as `dashboard/app.py`):
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/` | `dashboard/static/dashboard.html` served as a plain file |
+| GET | `/static/<path>` | Static assets, path-traversal guarded |
+| GET | `/stream` | SSE; sends latest reading on connect, then live |
+| GET | `/api/summary/latest` | Latest summary dict or 204 |
+| GET | `/api/summary/delta` | Always `{}` — no history |
+| GET | `/api/history` | Always `[]` — no history |
+| GET | `/api/device` | Device identity from latest summary |
+
+Run: `python3 hegg_mini.py [--udp-port 16121] [--http-port 8080] [--device-ip <ip>]`
+
+---
+
 ### `hegg_server.py`
 
 Convenience launcher for single-host deployments.  Starts three threads:
@@ -200,7 +236,9 @@ CREATE TABLE events (
 
 | Package | Purpose | Required |
 |---|---|---|
-| `flask` | Dashboard HTTP server | Yes |
+| `flask` | Dashboard HTTP server (`hegg_server.py` / `dashboard/app.py`) | Yes |
 | `prometheus_client` | Metrics + exposition | Yes |
 | `aiomqtt` | MQTT for HA integration | Optional |
 | `pytest` | Test runner | Dev |
+
+`hegg_mini.py` has no external dependencies beyond the Python standard library.
