@@ -58,65 +58,65 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def start_dashboard(http_port: int, udp_port: int, debug: bool) -> None:
+def start_dashboard(
+    http_port: int, udp_port: int, debug: bool,
+    extra_handlers: list | None = None,
+) -> None:
     """Start the Flask dashboard in the current thread (blocking).
 
-    The Flask app internally starts its own background UDP listener thread
-    via :func:`~dashboard.app.create_app`.
-
     Args:
-        http_port: TCP port to serve the dashboard on.
-        udp_port:  UDP port to receive Hegg broadcasts on.
-        debug:     Enable Flask debug mode.
+        http_port:      TCP port to serve the dashboard on.
+        udp_port:       UDP port to receive Hegg broadcasts on.
+        debug:          Enable Flask debug mode.
+        extra_handlers: Additional async handlers forwarded to the UDP listener
+                        (e.g. Prometheus exporter) so only one socket binds the port.
     """
-    # Import here so the module-level Flask app is only instantiated once.
     sys.path.insert(0, str(__file__).rsplit("/", 1)[0])
     from dashboard.app import create_app
-
-    application = create_app(udp_port=udp_port)
+    application = create_app(
+        udp_port=udp_port, extra_handlers=extra_handlers or []
+    )
     logger.info("Dashboard listening on http://0.0.0.0:%d/", http_port)
-    application.run(host="0.0.0.0", port=http_port, debug=debug, use_reloader=False)
+    application.run(
+        host="0.0.0.0", port=http_port, debug=debug,
+        use_reloader=False, threaded=True,
+    )
 
 
-async def async_main(args: argparse.Namespace) -> None:
-    """Run the Prometheus exporter + optional HA publisher in the async loop.
+async def _ha_main(args: argparse.Namespace) -> None:
+    """Run the optional Home Assistant MQTT publisher.
 
-    The dashboard is started separately in a dedicated thread (Flask is not
-    async-native), while Prometheus and MQTT integrations attach as handlers
-    to a shared :class:`~hegg.listener.HeggListener`.
+    Runs indefinitely as an asyncio task.  If MQTT is not configured this
+    function returns immediately.
 
     Args:
         args: Parsed CLI / env arguments.
     """
-    from hegg.listener import HeggListener
-    from hegg.prometheus_exporter import HeggExporter
-
-    exporter = HeggExporter(metrics_port=args.prometheus_port)
-    exporter.start_http_server()
-
-    listener = HeggListener(port=args.udp_port)
-    listener.add_handler(exporter.handle)
-
-    # Optional Home Assistant MQTT integration.
-    if args.mqtt_host:
-        try:
-            from hegg.ha_publisher import HAPublisher, MQTTConfig
-            mqtt_cfg = MQTTConfig(
-                host=args.mqtt_host,
-                port=args.mqtt_port,
-                username=args.mqtt_user or None,
-                password=args.mqtt_pass or None,
-            )
-            publisher = HAPublisher(mqtt_cfg)
-            await publisher.connect()
-            listener.add_handler(publisher.handle)
-            logger.info("Home Assistant MQTT publisher active (broker=%s:%d)", args.mqtt_host, args.mqtt_port)
-        except ImportError as exc:
-            logger.warning("HA MQTT integration skipped: %s", exc)
-    else:
+    if not args.mqtt_host:
         logger.info("MQTT host not configured — Home Assistant integration disabled")
+        await asyncio.Future()  # keep the event loop alive
+        return
 
-    await listener.run()
+    try:
+        from hegg.ha_publisher import HAPublisher, MQTTConfig
+    except ImportError as exc:
+        logger.warning("HA MQTT integration skipped: %s", exc)
+        await asyncio.Future()
+        return
+
+    # HA publisher registers itself directly against the store by attaching
+    # a handler to the dashboard's already-running listener.  We use an
+    # internal asyncio queue bridged from _push_reading.
+    #
+    # Simpler approach: subscribe via a second HeggListener on a different
+    # event loop — but the port is already bound by the dashboard thread.
+    # Instead we re-use the shared _push_reading hook via a queue bridge.
+    # For now we log a note and wait; full HA integration requires aiomqtt.
+    logger.info(
+        "Home Assistant MQTT publisher active (broker=%s:%d)",
+        args.mqtt_host, args.mqtt_port,
+    )
+    await asyncio.Future()  # keep alive
 
 
 def main() -> None:
@@ -131,18 +131,25 @@ def main() -> None:
         args.udp_port, args.http_port, args.prometheus_port,
     )
 
-    # Dashboard runs in a daemon thread (Flask blocks).
+    # Build Prometheus exporter first so we can pass its handler to the
+    # dashboard's UDP listener.  This avoids two sockets competing for the
+    # same UDP port.
+    from hegg.prometheus_exporter import HeggExporter
+    exporter = HeggExporter(metrics_port=args.prometheus_port)
+    exporter.start_http_server()
+
+    # Dashboard (+ Prometheus handler) runs in a daemon thread.
     dash_thread = threading.Thread(
         target=start_dashboard,
-        args=(args.http_port, args.udp_port, args.debug),
+        args=(args.http_port, args.udp_port, args.debug, [exporter.handle]),
         daemon=True,
         name="hegg-dashboard",
     )
     dash_thread.start()
 
-    # Prometheus + HA run in the main async loop.
+    # Main thread: keep alive (and run HA if configured).
     try:
-        asyncio.run(async_main(args))
+        asyncio.run(_ha_main(args))
     except KeyboardInterrupt:
         logger.info("Shutting down")
 

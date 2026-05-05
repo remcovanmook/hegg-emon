@@ -4,12 +4,13 @@ dashboard.app
 
 Flask dashboard with SSE live stream, history API, and SQLite persistence.
 
-SSE subscriber model
----------------------
-Each ``/stream`` client gets its own ``queue.Queue``.  The shared
-``_push_reading`` function fans out to all registered queues so no client
-starves another.  On connect the latest reading (if any) is sent immediately,
-eliminating the ~30 s first-data wait.
+SSE implementation
+------------------
+``/stream`` polls the SQLite store for rows newer than the last-seen
+timestamp, sleeping 1 s between polls.  This matches the device's broadcast
+rate and needs no pub/sub machinery.  The most recent stored row is sent
+immediately on connect so the browser has data without waiting for the next
+poll cycle.
 
 Routes
 ------
@@ -17,7 +18,7 @@ Routes
 GET /
     Dashboard HTML page.
 GET /stream
-    SSE stream; ``data:`` events are JSON-encoded HeggReading dicts.
+    SSE stream; ``data:`` events are JSON-encoded reading dicts.
 GET /api/latest
     Most recent reading as JSON, or 204.
 GET /api/history
@@ -29,12 +30,12 @@ GET /api/history
 import asyncio
 import json
 import logging
-import queue
+import time
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Iterator, List, Optional
+from typing import Callable, Awaitable, Iterator, List, Optional
 
-from flask import Flask, Response, jsonify, render_template, request, stream_with_context
+from flask import Flask, Response, jsonify, render_template, request
 
 from hegg.listener import HeggListener, HeggReading
 from hegg.store import HeggStore
@@ -50,23 +51,17 @@ app = Flask(__name__)
 _latest_reading: Optional[HeggReading] = None
 _latest_lock = threading.Lock()
 
-# Per-client SSE subscriber queues.
-_subscribers: List[queue.Queue] = []
-_subscribers_lock = threading.Lock()
-
 # SQLite store — initialised by create_app().
 _store: Optional[HeggStore] = None
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
 def _push_reading(reading: HeggReading) -> None:
-    """Store reading as latest and fan it out to all SSE subscribers.
+    """Persist a reading and record it as the latest.
 
-    Called from the asyncio UDP-listener thread; all operations are
-    thread-safe.
+    Called from the asyncio UDP-listener thread.
 
     Args:
         reading: Freshly parsed reading from the Hegg device.
@@ -81,24 +76,9 @@ def _push_reading(reading: HeggReading) -> None:
         except Exception:
             logger.exception("Store insert failed")
 
-    with _subscribers_lock:
-        for q in list(_subscribers):
-            try:
-                q.put_nowait(reading)
-            except queue.Full:
-                # Drop oldest to make room for latest.
-                try:
-                    q.get_nowait()
-                except queue.Empty:
-                    pass
-                try:
-                    q.put_nowait(reading)
-                except queue.Full:
-                    pass
-
 
 async def _async_handler(reading: HeggReading) -> None:
-    """Async bridge — called by HeggListener, delegates to thread-safe push.
+    """Async bridge from HeggListener to the thread-safe push function.
 
     Args:
         reading: Parsed reading from the Hegg device.
@@ -106,16 +86,20 @@ async def _async_handler(reading: HeggReading) -> None:
     _push_reading(reading)
 
 
-def _run_listener(port: int) -> None:
+def _run_listener(port: int, extra_handlers: List[Callable]) -> None:
     """Run the async UDP listener in a dedicated background thread.
 
     Args:
-        port: UDP port to bind to.
+        port:           UDP port to bind to.
+        extra_handlers: Additional async handler callables (e.g. Prometheus
+                        exporter) registered alongside the store writer.
     """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     listener = HeggListener(port=port)
     listener.add_handler(_async_handler)
+    for handler in extra_handlers:
+        listener.add_handler(handler)
     try:
         loop.run_until_complete(listener.run())
     finally:
@@ -174,52 +158,49 @@ def api_history() -> Response:
         return jsonify({"error": "store not initialised"}), 503
 
     hours = max(1, min(int(request.args.get("hours", 24)), 168))
-
-    # Auto bucket: aim for ~500 data points per request.
-    total_seconds = hours * 3600
-    auto_bucket = max(10, total_seconds // 500)
+    # Auto bucket: ~500 data points per request.
+    auto_bucket = max(10, (hours * 3600) // 500)
     bucket = int(request.args.get("bucket", auto_bucket))
 
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
-    data = _store.query(since, bucket_seconds=bucket)
-    return jsonify(data)
+    return jsonify(_store.query(since, bucket_seconds=bucket))
 
 
 @app.route("/stream")
 def stream() -> Response:
-    """SSE endpoint — one JSON reading per event, sent to each subscriber.
+    """SSE endpoint — tails the SQLite store for new rows.
 
-    Immediately delivers the latest known reading (if any) so the browser
-    shows data without waiting for the next UDP broadcast.
+    On connect, sends the most recent stored reading immediately (if any),
+    then polls once per second for rows newer than the last-seen timestamp.
+    Each event is a JSON-encoded reading dict.
     """
-    client_q: queue.Queue = queue.Queue(maxsize=120)
+    if _store is None:
+        return Response(": store not ready\n\n", mimetype="text/event-stream")
 
-    with _subscribers_lock:
-        _subscribers.append(client_q)
-
-    @stream_with_context
     def generate() -> Iterator[str]:
-        # Send latest immediately to avoid the first-data wait.
-        with _latest_lock:
-            initial = _latest_reading
-        if initial is not None:
-            yield f"data: {json.dumps(initial.to_dict())}\n\n"
-        else:
-            yield ": connected\n\n"
+        # Seed cursor 2 s before now so we catch the very latest row.
+        since_ms = int(time.time() * 1000) - 2000
 
-        try:
-            while True:
-                try:
-                    reading = client_q.get(timeout=25)
-                    yield f"data: {json.dumps(reading.to_dict())}\n\n"
-                except queue.Empty:
-                    yield ": keep-alive\n\n"
-        finally:
-            with _subscribers_lock:
-                try:
-                    _subscribers.remove(client_q)
-                except ValueError:
-                    pass
+        # Send the most recent row immediately so the browser doesn't wait.
+        rows = _store.query_raw_since(since_ms - 3000, limit=1)
+        if rows:
+            yield f"data: {json.dumps(rows[-1])}\n\n"
+            since_ms = int(
+                datetime.fromisoformat(rows[-1]["timestamp"]).timestamp() * 1000
+            )
+
+        while True:
+            time.sleep(1)
+            rows = _store.query_raw_since(since_ms)
+            for row in rows:
+                yield f"data: {json.dumps(row)}\n\n"
+            if rows:
+                since_ms = int(
+                    datetime.fromisoformat(rows[-1]["timestamp"]).timestamp() * 1000
+                )
+            else:
+                # Keep-alive comment to prevent proxy / browser timeout.
+                yield ": keep-alive\n\n"
 
     return Response(
         generate(),
@@ -232,12 +213,18 @@ def stream() -> Response:
 # Application factory
 # ---------------------------------------------------------------------------
 
-def create_app(udp_port: int = 16121, db_path: str = "hegg.db") -> Flask:
+def create_app(
+    udp_port: int = 16121,
+    db_path: str = "hegg.db",
+    extra_handlers: Optional[List] = None,
+) -> Flask:
     """Start background threads and return the configured Flask app.
 
     Args:
-        udp_port: UDP port to listen on for Hegg broadcasts.
-        db_path:  Path to the SQLite database file.
+        udp_port:       UDP port to listen on for Hegg broadcasts.
+        db_path:        Path to the SQLite database file.
+        extra_handlers: Additional async handler callables registered with
+                        the UDP listener (e.g. Prometheus exporter handle).
 
     Returns:
         Configured :class:`flask.Flask` instance.
@@ -246,11 +233,17 @@ def create_app(udp_port: int = 16121, db_path: str = "hegg.db") -> Flask:
     _store = HeggStore(path=db_path)
 
     threading.Thread(
-        target=_run_listener, args=(udp_port,), daemon=True, name="hegg-udp",
+        target=_run_listener,
+        args=(udp_port, extra_handlers or []),
+        daemon=True,
+        name="hegg-udp",
     ).start()
 
     threading.Thread(
-        target=_prune_loop, args=(_store,), daemon=True, name="hegg-prune",
+        target=_prune_loop,
+        args=(_store,),
+        daemon=True,
+        name="hegg-prune",
     ).start()
 
     logger.info("UDP listener started on port %d", udp_port)
@@ -267,4 +260,5 @@ if __name__ == "__main__":
     p.add_argument("--debug",     action="store_true")
     args = p.parse_args()
     create_app(udp_port=args.udp_port, db_path=args.db)
-    app.run(host="0.0.0.0", port=args.http_port, debug=args.debug, use_reloader=False)
+    app.run(host="0.0.0.0", port=args.http_port, debug=args.debug,
+            use_reloader=False, threaded=True)

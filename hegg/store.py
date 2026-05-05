@@ -124,6 +124,52 @@ class HeggStore:
             conn.execute(_INSERT, params)
             conn.commit()
 
+    def _row_to_dict(self, row: tuple) -> dict:
+        """Convert a raw SQLite row tuple to a reading dict.
+
+        Args:
+            row: Tuple of (ts_ms, serial, delivered, returned,
+                 voltage_l1..l3, current_l1..l3).
+
+        Returns:
+            Dict with string ``timestamp`` (ISO 8601 UTC) and numeric fields.
+        """
+        ts = datetime.fromtimestamp(row[0] / 1000, tz=timezone.utc).isoformat()
+        return {
+            "timestamp":       ts,
+            "serial":          row[1],
+            "power_delivered": row[2],
+            "power_returned":  row[3],
+            "voltage_l1": row[4], "voltage_l2": row[5], "voltage_l3": row[6],
+            "current_l1": row[7], "current_l2": row[8], "current_l3": row[9],
+        }
+
+    def query_raw_since(self, since_ts_ms: int, limit: int = 0) -> list:
+        """Return individual (non-aggregated) readings newer than *since_ts_ms*.
+
+        Intended for the SSE stream endpoint, which polls this every second
+        to tail new rows in insertion order.
+
+        Args:
+            since_ts_ms: Unix timestamp in milliseconds (exclusive lower bound).
+            limit:       Maximum rows to return; 0 means no limit.
+
+        Returns:
+            List of reading dicts ordered oldest-first.
+        """
+        sql = (
+            "SELECT ts, serial, delivered, returned, "
+            "voltage_l1, voltage_l2, voltage_l3, "
+            "current_l1, current_l2, current_l3 "
+            "FROM readings WHERE ts > ? ORDER BY ts ASC"
+        )
+        params: list = [since_ts_ms]
+        if limit:
+            sql += " LIMIT ?"
+            params.append(limit)
+        rows = self._conn().execute(sql, params).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def query(self, since: datetime, bucket_seconds: int = 60) -> list:
         """Return bucketed average readings since *since*.
 
