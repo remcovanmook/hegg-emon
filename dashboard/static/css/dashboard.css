@@ -246,13 +246,37 @@ html, body {
 }
 
 /* ── Energy row layout (used in summary strip cells) ── */
+
+/** Header bar at the top of each summary box. */
+.summary-item-header {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/** Optional model name rendered inline in the device box header. */
+.header-device-model {
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .energy-row {
-  display: grid;
-  /* label | value | unit | delta */
-  grid-template-columns: auto 1fr auto auto;
+  display: flex;
   align-items: baseline;
-  column-gap: 5px;
-  padding: 1px 0;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 2px 0;
 }
 
 .energy-row--sub {
@@ -260,29 +284,26 @@ html, body {
 }
 
 .energy-label {
-  font-size: 0.62rem;
+  font-size: 0.60rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
   white-space: nowrap;
+  min-width: 18px;
 }
 
 .energy-val {
   font-family: "JetBrains Mono", monospace;
-  font-size: 0.85rem;
+  font-size: 1.0rem;
   font-weight: 700;
   color: var(--text);
   white-space: nowrap;
 }
 
-.energy-row--main .energy-val {
-  font-size: 1.0rem;
-}
-
 .energy-row--sub .energy-val {
-  color: var(--text-muted);
   font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 .energy-unit {
@@ -290,12 +311,17 @@ html, body {
   color: var(--text-dim);
 }
 
+.energy-sep {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin: 0 1px;
+}
+
 .energy-delta {
   font-family: "JetBrains Mono", monospace;
   font-size: 0.65rem;
   color: var(--text-dim);
   white-space: nowrap;
-  text-align: right;
 }
 
 .energy-delta--pos { color: var(--delivered-color); }

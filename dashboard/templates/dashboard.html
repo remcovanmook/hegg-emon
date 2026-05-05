@@ -48,65 +48,71 @@
       <h1 id="summary-heading" class="sr-only">Summary</h1>
       <div class="summary-strip">
 
-        <!-- Energy In: total + T1/T2 breakdown -->
+        <!-- Energy In -->
         <div class="summary-item summary-item--energy">
+          <div class="summary-item-header">Energy In</div>
           <div class="energy-row energy-row--main">
-            <span class="energy-label">Energy In</span>
             <span class="energy-val" id="energy-in-total">—</span>
             <span class="energy-unit">kWh</span>
+            <span class="energy-sep">/</span>
             <span class="energy-delta" id="energy-in-total-delta"></span>
           </div>
           <div class="energy-row energy-row--sub">
             <span class="energy-label">T1</span>
             <span class="energy-val" id="energy-in-t1">—</span>
             <span class="energy-unit">kWh</span>
+            <span class="energy-sep">/</span>
             <span class="energy-delta" id="energy-in-t1-delta"></span>
           </div>
           <div class="energy-row energy-row--sub">
             <span class="energy-label">T2</span>
             <span class="energy-val" id="energy-in-t2">—</span>
             <span class="energy-unit">kWh</span>
+            <span class="energy-sep">/</span>
             <span class="energy-delta" id="energy-in-t2-delta"></span>
           </div>
         </div>
 
-        <!-- Energy Out: total + T1/T2 breakdown -->
+        <!-- Energy Out -->
         <div class="summary-item summary-item--energy">
+          <div class="summary-item-header">Energy Out</div>
           <div class="energy-row energy-row--main">
-            <span class="energy-label">Energy Out</span>
             <span class="energy-val" id="energy-out-total">—</span>
             <span class="energy-unit">kWh</span>
+            <span class="energy-sep">/</span>
             <span class="energy-delta" id="energy-out-total-delta"></span>
           </div>
           <div class="energy-row energy-row--sub">
             <span class="energy-label">T1</span>
             <span class="energy-val" id="energy-out-t1">—</span>
             <span class="energy-unit">kWh</span>
+            <span class="energy-sep">/</span>
             <span class="energy-delta" id="energy-out-t1-delta"></span>
           </div>
           <div class="energy-row energy-row--sub">
             <span class="energy-label">T2</span>
             <span class="energy-val" id="energy-out-t2">—</span>
             <span class="energy-unit">kWh</span>
+            <span class="energy-sep">/</span>
             <span class="energy-delta" id="energy-out-t2-delta"></span>
           </div>
         </div>
 
         <!-- Gas -->
         <div class="summary-item">
+          <div class="summary-item-header">Gas</div>
           <div class="energy-row energy-row--main">
-            <span class="energy-label">Gas</span>
             <span class="energy-val" id="gas-delivered">—</span>
             <span class="energy-unit">m³</span>
+            <span class="energy-sep">/</span>
             <span class="energy-delta" id="gas-delta"></span>
           </div>
         </div>
 
-        <!-- Device -->
+        <!-- Device — model in header, details as sub-rows -->
         <div class="summary-item summary-item--device">
-          <div class="energy-row energy-row--main">
-            <span class="energy-label">Device</span>
-            <span class="energy-val summary-value--sm" id="device-model">—</span>
+          <div class="summary-item-header">
+            Device <span class="header-device-model" id="device-model"></span>
           </div>
           <div class="energy-row energy-row--sub">
             <span class="energy-label">IP</span>
