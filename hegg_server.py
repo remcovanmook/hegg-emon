@@ -77,13 +77,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--udp-port",        type=int, default=int(os.getenv("HEGG_UDP_PORT",        "16121")))
     p.add_argument("--http-port",       type=int, default=int(os.getenv("HEGG_HTTP_PORT",       "8080")))
     p.add_argument("--prometheus-port", type=int, default=int(os.getenv("HEGG_PROMETHEUS_PORT", "9101")))
-    p.add_argument("--device-ip",  default=os.getenv("HEGG_DEVICE_IP", ""))
-    p.add_argument("--db",         default=default_db_path())
-    p.add_argument("--mqtt-host",  default=os.getenv("HEGG_MQTT_HOST", ""))
-    p.add_argument("--mqtt-port",  type=int, default=int(os.getenv("HEGG_MQTT_PORT", "1883")))
-    p.add_argument("--mqtt-user",  default=os.getenv("HEGG_MQTT_USER", ""))
-    p.add_argument("--mqtt-pass",  default=os.getenv("HEGG_MQTT_PASS", ""))
-    p.add_argument("--debug",      action="store_true")
+    p.add_argument("--device-ip",       default=os.getenv("HEGG_DEVICE_IP", ""))
+    p.add_argument("--db",              default=default_db_path())
+    p.add_argument("--mqtt-host",       default=os.getenv("HEGG_MQTT_HOST", ""))
+    p.add_argument("--mqtt-port",       type=int, default=int(os.getenv("HEGG_MQTT_PORT", "1883")))
+    p.add_argument("--mqtt-user",       default=os.getenv("HEGG_MQTT_USER", ""))
+    p.add_argument("--mqtt-pass",       default=os.getenv("HEGG_MQTT_PASS", ""))
+    p.add_argument("--price-api-key",   default=os.getenv("HEGG_PRICE_API_KEY", ""),
+                   help="energyforecast.de API token for day-ahead price fetching")
+    p.add_argument("--debug",           action="store_true")
     return p.parse_args()
 
 
@@ -147,6 +149,15 @@ def main() -> None:
             logger.info("MQTT exporter started (broker=%s:%d)", args.mqtt_host, args.mqtt_port)
         except ImportError as exc:
             logger.warning("MQTT integration disabled: %s", exc)
+
+    # ── Price fetcher: pulls day-ahead prices once daily ──────────────────────
+    if args.price_api_key:
+        from hegg.price_fetcher import PriceFetcher
+        price_store = HeggStore(path=db_path)
+        PriceFetcher(store=price_store, api_key=args.price_api_key).start()
+        logger.info("Price fetcher started (market_zone=NL, daily at 14:00 UTC)")
+    else:
+        logger.info("No --price-api-key supplied — price fetching disabled")
 
     # ── Flask dashboard: reads SQLite ─────────────────────────────────────────
     application = create_app(db_path=db_path)

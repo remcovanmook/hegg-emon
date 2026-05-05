@@ -113,6 +113,14 @@ CREATE TABLE IF NOT EXISTS summaries (
     gas_delivered            REAL
 );
 CREATE INDEX IF NOT EXISTS idx_summaries_ts ON summaries (ts);
+
+CREATE TABLE IF NOT EXISTS prices (
+    ts_start      INTEGER NOT NULL UNIQUE,  -- Unix ms, start of hour (UTC)
+    ts_end        INTEGER NOT NULL,         -- Unix ms, end of hour (UTC)
+    price_eur_kwh REAL    NOT NULL,         -- raw EPEX spot price in EUR/kWh
+    price_origin  TEXT    NOT NULL          -- 'actual' or 'forecast'
+);
+CREATE INDEX IF NOT EXISTS idx_prices_ts ON prices (ts_start);
 """
 
 _INSERT = """
@@ -472,3 +480,166 @@ class HeggStore:
             cur3 = conn.execute("DELETE FROM summaries WHERE ts < ?", (cutoff_ms,))
             conn.commit()
         return cur1.rowcount + cur2.rowcount + cur3.rowcount
+
+    # ------------------------------------------------------------------
+    # Price methods
+    # ------------------------------------------------------------------
+
+    def insert_prices(self, rows: list) -> None:
+        """Store hourly price rows fetched from the energyforecast.de API.
+
+        Uses ``INSERT OR REPLACE`` so forecast entries are overwritten when
+        the same hour's actual price becomes available on a subsequent fetch.
+
+        Args:
+            rows: List of dicts with keys ``ts_start`` (Unix ms), ``ts_end``
+                  (Unix ms), ``price_eur_kwh`` (float), ``price_origin`` (str).
+        """
+        with self._write_lock:
+            conn = self._conn()
+            conn.executemany(
+                """INSERT OR REPLACE INTO prices
+                       (ts_start, ts_end, price_eur_kwh, price_origin)
+                   VALUES (?, ?, ?, ?)""",
+                [
+                    (r["ts_start"], r["ts_end"], r["price_eur_kwh"], r["price_origin"])
+                    for r in rows
+                ],
+            )
+            conn.commit()
+
+    def current_price(self) -> dict:
+        """Return the price entry whose window covers the current UTC moment.
+
+        Returns:
+            Dict with keys ``ts_start``, ``ts_end``, ``price_eur_kwh``,
+            ``price_origin``, or ``{}`` if no matching row exists.
+        """
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        row = self._conn().execute(
+            """SELECT ts_start, ts_end, price_eur_kwh, price_origin
+               FROM prices
+               WHERE ts_start <= ? AND ts_end > ?
+               ORDER BY ts_start DESC LIMIT 1""",
+            (now_ms, now_ms),
+        ).fetchone()
+        if row is None:
+            return {}
+        return {
+            "ts_start":      row[0],
+            "ts_end":        row[1],
+            "price_eur_kwh": row[2],
+            "price_origin":  row[3],
+        }
+
+    def prices_window(self, hours: int = 24) -> list:
+        """Return price entries from the last *hours* hours through all available data.
+
+        Starting from ``now - hours`` ensures past actual EPEX prices are
+        included so the frontend can join them with historical consumption data.
+        All future entries in the DB are also returned.
+
+        Args:
+            hours: Historical look-back in hours (default 24).
+
+        Returns:
+            List of price dicts ordered by ``ts_start`` ascending.
+        """
+        since_ms = int(
+            (datetime.now(timezone.utc) - timedelta(hours=hours)).timestamp() * 1000
+        )
+        rows = self._conn().execute(
+            """SELECT ts_start, ts_end, price_eur_kwh, price_origin
+               FROM prices
+               WHERE ts_start >= ?
+               ORDER BY ts_start ASC""",
+            (since_ms,),
+        ).fetchall()
+        return [
+            {
+                "ts_start":      r[0],
+                "ts_end":        r[1],
+                "price_eur_kwh": r[2],
+                "price_origin":  r[3],
+            }
+            for r in rows
+        ]
+
+    def has_current_prices(self) -> bool:
+        """Return True if the DB contains a price entry for the current hour.
+
+        Used by :class:`~hegg.price_fetcher.PriceFetcher` to decide whether
+        to skip the startup fetch.
+
+        Returns:
+            ``True`` if a current price exists, ``False`` otherwise.
+        """
+        return bool(self.current_price())
+
+    def hourly_consumption(self, hours: int = 24) -> list:
+        """Return per-hour energy and gas consumption deltas from the summaries table.
+
+        For each UTC hour in the requested window, takes the last summary row
+        in that hour (highest ``ts``) and computes the delta against the
+        previous hour's last row.  One extra hour before the window is fetched
+        to compute the first delta.
+
+        Args:
+            hours: Historical window in hours (default 24).
+
+        Returns:
+            List of dicts, one per complete hour, with keys:
+
+            - ``ts``                       — hour start, Unix ms (UTC)
+            - ``energy_delivered_tariff1`` — kWh imported on T1
+            - ``energy_delivered_tariff2`` — kWh imported on T2
+            - ``energy_returned_tariff1``  — kWh exported on T1
+            - ``energy_returned_tariff2``  — kWh exported on T2
+            - ``gas_delivered``            — m³ gas consumed
+        """
+        now      = datetime.now(timezone.utc)
+        now_ms   = int(now.timestamp() * 1000)
+        # Fetch one extra hour before the window to compute the first delta.
+        since_ms = int((now - timedelta(hours=hours + 1)).timestamp() * 1000)
+
+        rows = self._conn().execute(
+            """
+            SELECT s.ts,
+                   s.energy_delivered_tariff1, s.energy_delivered_tariff2,
+                   s.energy_returned_tariff1,  s.energy_returned_tariff2,
+                   s.gas_delivered
+            FROM summaries s
+            INNER JOIN (
+                SELECT (ts / 3600000) * 3600000 AS hour_ts, MAX(ts) AS max_ts
+                FROM summaries
+                WHERE ts >= ? AND ts <= ?
+                GROUP BY hour_ts
+            ) h ON s.ts = h.max_ts
+            ORDER BY s.ts ASC
+            """,
+            (since_ms, now_ms),
+        ).fetchall()
+
+        window_start_ms = int((now - timedelta(hours=hours)).timestamp() * 1000)
+
+        def _d(a, b):
+            """Compute a non-negative delta between two cumulative meter values."""
+            return round((a or 0.0) - (b or 0.0), 4)
+
+        result = []
+        prev   = None
+        for row in rows:
+            ts, d1, d2, r1, r2, gas = row
+            hour_ts = (ts // 3_600_000) * 3_600_000
+            if prev is not None and hour_ts >= window_start_ms:
+                result.append({
+                    "ts":                       hour_ts,
+                    "energy_delivered_tariff1": _d(d1,  prev[1]),
+                    "energy_delivered_tariff2": _d(d2,  prev[2]),
+                    "energy_returned_tariff1":  _d(r1,  prev[3]),
+                    "energy_returned_tariff2":  _d(r2,  prev[4]),
+                    "gas_delivered":            _d(gas, prev[5]),
+                })
+            prev = row
+
+        return result

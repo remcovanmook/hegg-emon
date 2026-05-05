@@ -286,7 +286,7 @@ function recolorCharts() {
 
   Chart.defaults.color = tick;
 
-  [powerChart, ...voltageCharts, ...currentCharts].forEach(chart => {
+  [powerChart, ...voltageCharts, ...currentCharts, usageChart, costChart, gasChart].filter(Boolean).forEach(chart => {
     for (const axis of Object.values(chart.options.scales)) {
       if (axis.ticks) axis.ticks.color = tick;
       if (axis.grid)  axis.grid.color  = grid;
@@ -353,6 +353,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     selectedHours = Number.parseInt(el.historyRange.value, 10);
     loadHistory(selectedHours);
     loadSummaryDelta(selectedHours);
+    loadUsageCharts();
   });
 
   // Theme toggle: click cycles light → dark → auto.
@@ -369,9 +370,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (document.documentElement.dataset.theme === "auto") recolorCharts();
   });
 
+  // Tab buttons.
+  document.getElementById("tab-btn-electricity").addEventListener("click", () => switchTab("electricity"));
+  document.getElementById("tab-btn-usage").addEventListener("click",       () => switchTab("usage"));
+
   // Minute-level refresh for absolute values; device info is static.
   setInterval(loadSummary, 60_000);
   setInterval(loadDevice,  300_000);
+
+  // Usage & cost charts: load on startup, refresh once per hour.
+  loadUsageCharts();
+  setInterval(loadUsageCharts, 60 * 60_000);
 
   // Clock — updates every second.
   const tickClock = () => setText("header-time", new Date().toLocaleTimeString());
@@ -443,6 +452,62 @@ function initCharts() {
       data: { datasets: [makeDataset("A", [COLORS.l1, COLORS.l2, COLORS.l3][i])] },
       options: makeInlineOpts(v => v.toFixed(1), "A"),
     }));
+  });
+
+  // Hourly cost bar chart: import cost (positive), export revenue (negative).
+  costChart = new Chart(document.getElementById("chart-cost"), {
+    type: "bar",
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: "Import cost (€)",
+          data: [],
+          backgroundColor: COLORS.delivered + "cc",
+          borderRadius: 3,
+          borderSkipped: false,
+        },
+        {
+          label: "Export revenue (€)",
+          data: [],
+          backgroundColor: COLORS.returned + "cc",
+          borderRadius: 3,
+          borderSkipped: false,
+        },
+      ],
+    },
+    options: _barOpts("€", v => `€${v.toFixed(3)}`, ctx => `${ctx.dataset.label}: €${Math.abs(ctx.parsed.y).toFixed(4)}`, true),
+  });
+
+  // Hourly electricity usage: T1/T2 import (positive), T1/T2 export (negative).
+  usageChart = new Chart(document.getElementById("chart-usage"), {
+    type: "bar",
+    data: {
+      labels: [],
+      datasets: [
+        { label: "Import T1 (kWh)", data: [], backgroundColor: COLORS.delivered + "cc", borderRadius: 3, borderSkipped: false },
+        { label: "Import T2 (kWh)", data: [], backgroundColor: COLORS.delivered + "55", borderRadius: 3, borderSkipped: false },
+        { label: "Export T1 (kWh)", data: [], backgroundColor: COLORS.returned  + "cc", borderRadius: 3, borderSkipped: false },
+        { label: "Export T2 (kWh)", data: [], backgroundColor: COLORS.returned  + "55", borderRadius: 3, borderSkipped: false },
+      ],
+    },
+    options: _barOpts("kWh", v => `${v.toFixed(3)} kWh`, ctx => `${ctx.dataset.label}: ${Math.abs(ctx.parsed.y).toFixed(4)} kWh`, true),
+  });
+
+  // Hourly gas usage.
+  gasChart = new Chart(document.getElementById("chart-gas"), {
+    type: "bar",
+    data: {
+      labels: [],
+      datasets: [{
+        label: "Gas (m³)",
+        data: [],
+        backgroundColor: "#f59e0bcc",
+        borderRadius: 3,
+        borderSkipped: false,
+      }],
+    },
+    options: _barOpts("m³", v => `${v.toFixed(3)} m³`, ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)} m³`),
   });
 }
 
@@ -641,6 +706,206 @@ function setEnergyDelta(id, value, period, unit) {
   const sign = value >= 0 ? "+" : "";
   e.textContent = `${sign}${value.toFixed(2)} ${unit} / ${period}`;
   e.className   = `energy-delta ${value >= 0 ? "energy-delta--pos" : "energy-delta--neg"}`;
+}
+
+/* ── Tab switching ──────────────────────────────────────────────────────── */
+
+/** IDs of all tab panels and their corresponding button IDs. */
+const TAB_IDS = ["electricity", "usage"];
+
+/**
+ * Activate the named tab panel and deactivate all others.
+ *
+ * After showing the Usage & Cost panel, resizes the Chart.js instances
+ * inside it so they fill their containers correctly.
+ *
+ * @param {string} tabId - One of the IDs in TAB_IDS.
+ */
+function switchTab(tabId) {
+  for (const id of TAB_IDS) {
+    const panel = document.getElementById(`tab-${id}`);
+    const btn   = document.getElementById(`tab-btn-${id}`);
+    const active = id === tabId;
+    if (panel) panel.hidden = !active;
+    if (btn) {
+      btn.classList.toggle("tab-btn--active", active);
+      btn.setAttribute("aria-selected", active);
+    }
+  }
+  // Chart.js cannot measure a hidden element; resize after reveal.
+  if (tabId === "usage") {
+    [usageChart, costChart, gasChart].forEach(c => c && c.resize());
+  } else {
+    [powerChart, ...voltageCharts, ...currentCharts].forEach(c => c && c.resize());
+  }
+}
+
+/* ── Shared bar-chart options factory ─────────────────────────────────── */
+
+/**
+ * Return a Chart.js options object for the hourly bar charts.
+ *
+ * All three charts (usage, cost, gas) share the same axes style.
+ *
+ * @param {string} yLabel - Y-axis unit label text.
+ * @param {function} tickFmt - Callback that formats a raw value for tick labels.
+ * @param {function} tooltipFmt - Callback that formats a dataset value for tooltips.
+ * @returns {object}
+ */
+function _barOpts(yLabel, tickFmt, tooltipFmt, stacked = false) {
+  // 2-hour step for 24 h data — matches AXIS_CONFIG[24] on the electricity tab.
+  const stepMs = 2 * 3_600_000;
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: "index", intersect: false },
+    scales: {
+      x: {
+        type: "time",
+        stacked,
+        time: {
+          unit: "hour",
+          stepSize: 2,
+          tooltipFormat: "HH:mm d MMM",
+          displayFormats: { hour: "HH:mm", day: "MMM d" },
+        },
+        ticks: { color: "#6b7490", maxTicksLimit: 100, font: { size: 11 } },
+        grid:  { color: "rgba(255,255,255,0.04)" },
+        /** Keep only ticks at exact 2-hour boundaries. */
+        afterBuildTicks: scale => {
+          scale.ticks = scale.ticks.filter(t => t.value % stepMs === 0);
+        },
+      },
+      y: {
+        stacked,
+        ticks: { color: "#6b7490", font: { size: 11 }, callback: tickFmt },
+        grid:  { color: "rgba(255,255,255,0.04)" },
+      },
+    },
+    plugins: {
+      legend:  { display: true, position: "bottom", align: "end", labels: { color: "#6b7490", font: { size: 11 } } },
+      tooltip: { callbacks: { label: tooltipFmt } },
+    },
+  };
+}
+
+/* ── Usage & cost charts ───────────────────────────────────────────────── */
+
+/** @type {Chart|null} */ let costChart  = null;
+/** @type {Chart|null} */ let usageChart = null;
+/** @type {Chart|null} */ let gasChart   = null;
+
+/**
+ * Fetch hourly consumption and price data and populate all three Usage &
+ * Cost charts in one pass.
+ *
+ * Prices are optional — consumption charts always render, cost chart only
+ * renders for hours where a price is available.
+ */
+async function loadUsageCharts() {
+  let consumption, prices;
+  try {
+    const [rC, rP] = await Promise.all([
+      fetch(`/api/summary/hourly?hours=${selectedHours}`),
+      fetch(`/api/prices?hours=${selectedHours}`),
+    ]);
+    if (!rC.ok || rC.status === 204) return;
+    consumption = await rC.json();
+    prices = rP.ok && rP.status !== 204 ? await rP.json() : [];
+  } catch {
+    return;
+  }
+
+  // Build lookups by hour timestamp.
+  const consumMap = {};
+  for (const c of consumption) consumMap[c.ts] = c;
+  const priceMap = {};
+  for (const p of prices) priceMap[p.ts_start] = p.price_eur_kwh;
+
+  // Generate every UTC hour slot for the full selected window.
+  // Hours with no data get 0 so the x-axis spans the complete range.
+  const HOUR_MS  = 3_600_000;
+  const nowMs    = Date.now();
+  const startMs  = Math.floor((nowMs - selectedHours * HOUR_MS) / HOUR_MS) * HOUR_MS;
+
+  const labels = [], d1 = [], d2 = [], r1 = [], r2 = [], gas = [];
+  const importCost = [], exportRevenue = [];
+
+  for (let h = startMs; h <= nowMs; h += HOUR_MS) {
+    const c     = consumMap[h];
+    const price = priceMap[h] ?? null;
+    const del1  = c ? (c.energy_delivered_tariff1 ?? 0) : 0;
+    const del2  = c ? (c.energy_delivered_tariff2 ?? 0) : 0;
+    const ret1  = c ? (c.energy_returned_tariff1  ?? 0) : 0;
+    const ret2  = c ? (c.energy_returned_tariff2  ?? 0) : 0;
+    const gasV  = c ? (c.gas_delivered            ?? 0) : 0;
+
+    labels.push(new Date(h));
+    d1.push(+(del1.toFixed(4)));
+    d2.push(+(del2.toFixed(4)));
+    r1.push(-(+(ret1.toFixed(4))));
+    r2.push(-(+(ret2.toFixed(4))));
+    gas.push(+(gasV.toFixed(4)));
+    importCost.push(   price !== null ? +((del1 + del2) * price).toFixed(4) : 0);
+    exportRevenue.push(price !== null ? -(+(ret1 + ret2) * price).toFixed(4) : 0);
+  }
+
+  applyXAxisConfig(selectedHours);
+
+  if (usageChart) {
+    usageChart.data.labels = labels;
+    usageChart.data.datasets[0].data = d1;
+    usageChart.data.datasets[1].data = d2;
+    usageChart.data.datasets[2].data = r1;
+    usageChart.data.datasets[3].data = r2;
+    usageChart.update("none");
+  }
+
+  if (gasChart) {
+    gasChart.data.labels = labels;
+    gasChart.data.datasets[0].data = gas;
+    gasChart.update("none");
+  }
+
+  if (costChart) {
+    costChart.data.labels = labels;
+    costChart.data.datasets[0].data = importCost;
+    costChart.data.datasets[1].data = exportRevenue;
+    costChart.update("none");
+  }
+
+  // Period label, matching the format used by loadSummaryDelta.
+  const _label = selectedHours >= 24 ? `${Math.round(selectedHours / 24)}d` : `${selectedHours}h`;
+
+  // Usage totals.
+  const totalDel  = d1.reduce((a, b) => a + b, 0) + d2.reduce((a, b) => a + b, 0);
+  const totalRet  = (-r1.reduce((a, b) => a + b, 0)) + (-r2.reduce((a, b) => a + b, 0));
+  const netUsage  = totalDel - totalRet;
+  setText("usage-net-val", netUsage.toFixed(2));
+  const usageDeltaIn  = document.getElementById("usage-delta-in");
+  const usageDeltaOut = document.getElementById("usage-delta-out");
+  if (usageDeltaIn)  usageDeltaIn.textContent  = `↓ ${totalDel.toFixed(2)} kWh / ${_label}`;
+  if (usageDeltaOut) usageDeltaOut.textContent = `↑ ${totalRet.toFixed(2)} kWh / ${_label}`;
+
+  // Cost totals.
+  const totalImport = importCost.reduce((a, b) => a + b, 0);
+  const totalExport = -exportRevenue.reduce((a, b) => a + b, 0);
+  const netCost     = totalImport - totalExport;
+  const netEl       = document.getElementById("cost-net-total");
+  if (netEl) {
+    netEl.textContent = netCost.toFixed(2);
+    netEl.className   = "power-value mono " + (netCost >= 0 ? "cost-import" : "cost-export");
+  }
+  const costDeltaIn  = document.getElementById("cost-delta-in");
+  const costDeltaOut = document.getElementById("cost-delta-out");
+  if (costDeltaIn)  costDeltaIn.textContent  = `↓ €${totalImport.toFixed(2)} / ${_label}`;
+  if (costDeltaOut) costDeltaOut.textContent = `↑ €${totalExport.toFixed(2)} / ${_label}`;
+
+  // Gas totals.
+  const totalGas = gas.reduce((a, b) => a + b, 0);
+  setText("gas-total-val", totalGas.toFixed(3));
+
 }
 
 /* ── SSE ────────────────────────────────────────────────────────────────── */

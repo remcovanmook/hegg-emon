@@ -49,7 +49,7 @@
 
   <main class="main">
 
-    <!-- ── Summary strip ── -->
+    <!-- ── Summary strip (always visible) ─────────────────────────────── -->
     <section class="section section--summary" aria-labelledby="summary-heading">
       <h1 id="summary-heading" class="sr-only">Summary</h1>
       <div class="summary-strip">
@@ -129,215 +129,291 @@
       </div>
     </section>
 
-    <!-- ── Power ── -->
-    <section class="section" aria-labelledby="power-heading">
-      <h2 id="power-heading" class="section-title">Power</h2>
-      <div class="chart-card" id="power-display">
-        <div class="power-card-header">
-          <div class="power-card-headline">
-            <span class="power-direction" id="power-direction">—</span>
-            <span class="power-value mono" id="power-net-val">—</span>
-            <span class="power-unit">W</span>
+    <!-- ── Tab bar ─────────────────────────────────────────────────────── -->
+    <nav class="tab-bar" role="tablist" aria-label="Dashboard view">
+      <button class="tab-btn tab-btn--active" id="tab-btn-electricity"
+              role="tab" aria-selected="true" aria-controls="tab-electricity">Electricity</button>
+      <button class="tab-btn" id="tab-btn-usage"
+              role="tab" aria-selected="false" aria-controls="tab-usage">Usage &amp; Cost</button>
+    </nav>
+
+    <!-- ══ Tab 1: Electricity ══════════════════════════════════════════════ -->
+    <div id="tab-electricity" role="tabpanel" aria-labelledby="tab-btn-electricity">
+
+      <!-- ── Power ── -->
+      <section class="section" aria-labelledby="power-heading">
+        <h2 id="power-heading" class="section-title">Power</h2>
+        <div class="chart-card" id="power-display">
+          <div class="power-card-header">
+            <div class="power-card-headline">
+              <span class="power-direction" id="power-direction">—</span>
+              <span class="power-value mono" id="power-net-val">—</span>
+              <span class="power-unit">W</span>
+            </div>
+            <div class="power-card-deltas">
+              <span class="power-delta-in" id="power-delta-in"></span>
+              <span class="power-delta-out" id="power-delta-out"></span>
+            </div>
           </div>
-          <div class="power-card-deltas">
-            <span class="power-delta-in" id="power-delta-in"></span>
-            <span class="power-delta-out" id="power-delta-out"></span>
+          <div class="chart-wrapper"><canvas id="chart-power" aria-label="Net power history"></canvas></div>
+        </div>
+      </section>
+
+      <!-- ── Voltage ── -->
+      <section class="section" aria-labelledby="voltage-heading">
+        <h2 id="voltage-heading" class="section-title">Voltage</h2>
+        <div class="cards-row cards-row--three">
+          <article class="card card--phase card--with-chart" id="card-v-l1">
+            <div class="phase-row">
+              <div class="phase-badge">L1</div>
+              <div class="phase-value-group">
+                <div class="card-value" id="voltage-l1">—</div>
+                <div class="card-unit">V</div>
+              </div>
+            </div>
+            <div class="chart-wrapper chart-wrapper--inline">
+              <canvas id="chart-v-l1" aria-label="L1 voltage history"></canvas>
+            </div>
+          </article>
+          <article class="card card--phase card--with-chart" id="card-v-l2">
+            <div class="phase-row">
+              <div class="phase-badge">L2</div>
+              <div class="phase-value-group">
+                <div class="card-value" id="voltage-l2">—</div>
+                <div class="card-unit">V</div>
+              </div>
+            </div>
+            <div class="chart-wrapper chart-wrapper--inline">
+              <canvas id="chart-v-l2" aria-label="L2 voltage history"></canvas>
+            </div>
+          </article>
+          <article class="card card--phase card--with-chart" id="card-v-l3">
+            <div class="phase-row">
+              <div class="phase-badge">L3</div>
+              <div class="phase-value-group">
+                <div class="card-value" id="voltage-l3">—</div>
+                <div class="card-unit">V</div>
+              </div>
+            </div>
+            <div class="chart-wrapper chart-wrapper--inline">
+              <canvas id="chart-v-l3" aria-label="L3 voltage history"></canvas>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ── Current ── -->
+      <section class="section" aria-labelledby="current-heading">
+        <h2 id="current-heading" class="section-title">Current</h2>
+        <div class="cards-row cards-row--three">
+          <article class="card card--phase card--with-chart" id="card-c-l1">
+            <div class="phase-row">
+              <div class="phase-badge">L1</div>
+              <div class="phase-value-group">
+                <div class="card-value" id="current-l1">—</div>
+                <div class="card-unit">A</div>
+              </div>
+            </div>
+            <div class="chart-wrapper chart-wrapper--inline">
+              <canvas id="chart-c-l1" aria-label="L1 current history"></canvas>
+            </div>
+          </article>
+          <article class="card card--phase card--with-chart" id="card-c-l2">
+            <div class="phase-row">
+              <div class="phase-badge">L2</div>
+              <div class="phase-value-group">
+                <div class="card-value" id="current-l2">—</div>
+                <div class="card-unit">A</div>
+              </div>
+            </div>
+            <div class="chart-wrapper chart-wrapper--inline">
+              <canvas id="chart-c-l2" aria-label="L2 current history"></canvas>
+            </div>
+          </article>
+          <article class="card card--phase card--with-chart" id="card-c-l3">
+            <div class="phase-row">
+              <div class="phase-badge">L3</div>
+              <div class="phase-value-group">
+                <div class="card-value" id="current-l3">—</div>
+                <div class="card-unit">A</div>
+              </div>
+            </div>
+            <div class="chart-wrapper chart-wrapper--inline">
+              <canvas id="chart-c-l3" aria-label="L3 current history"></canvas>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ── 3-phase wye phasor diagram ── -->
+      <section class="section" aria-labelledby="wye-heading">
+        <h2 id="wye-heading" class="section-title">3-Phase Wye System</h2>
+        <div class="chart-card wye-card">
+          <div class="wye-layout">
+
+            <div class="wye-diagram-wrap" aria-label="3-phase phasor diagram">
+              <canvas id="wye-canvas" aria-label="Wye phasor diagram"></canvas>
+            </div>
+
+            <div class="wye-stats">
+
+              <div class="wye-stats-group">
+                <div class="wye-stats-header">Phase voltages</div>
+                <table class="wye-table" id="wye-phase-table">
+                  <thead><tr><th class="sr-only" scope="col">Phase</th><th class="sr-only" scope="col">Voltage</th><th class="sr-only" scope="col">Unit</th><th class="sr-only" scope="col">IEC delta</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l1"></span>L1</td>
+                      <td class="wt-val mono" id="wye-v-l1">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l1"></td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l2"></span>L2</td>
+                      <td class="wt-val mono" id="wye-v-l2">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l2"></td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l3"></span>L3</td>
+                      <td class="wt-val mono" id="wye-v-l3">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l3"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="wye-stats-group">
+                <div class="wye-stats-header">Line differentials</div>
+                <table class="wye-table">
+                  <thead><tr><th class="sr-only" scope="col">Phase pair</th><th class="sr-only" scope="col">Voltage</th><th class="sr-only" scope="col">Unit</th><th class="sr-only" scope="col">IEC delta</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l12"></span>L1–L2</td>
+                      <td class="wt-val mono" id="wye-diff-l12">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l12"></td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l13"></span>L1–L3</td>
+                      <td class="wt-val mono" id="wye-diff-l13">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l13"></td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label"><span class="wye-dot wye-dot--l23"></span>L2–L3</td>
+                      <td class="wt-val mono" id="wye-diff-l23">—</td>
+                      <td class="wt-unit">V</td>
+                      <td class="wt-ideal" id="wye-ideal-l23"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="wye-stats-group">
+                <div class="wye-stats-header">Neutral offset</div>
+                <table class="wye-table">
+                  <thead><tr><th class="sr-only" scope="col">Metric</th><th class="sr-only" scope="col">Value</th><th class="sr-only" scope="col">Unit</th><th class="sr-only" scope="col">Diagram</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td class="wt-label">Magnitude</td>
+                      <td class="wt-val" id="wye-neutral-mag">—</td>
+                      <td class="wt-unit">V</td>
+                      <!-- Canvas spans 4 rows; the 4th empty row absorbs excess height -->
+                      <td class="wt-ideal wt-canvas-cell" rowspan="4">
+                        <div class="wye-neutral-mini-wrap">
+                          <canvas id="wye-neutral-canvas" aria-label="Neutral offset polar diagram"></canvas>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label">Angle</td>
+                      <td class="wt-val" id="wye-neutral-ang">—</td>
+                      <td class="wt-unit">°</td>
+                    </tr>
+                    <tr>
+                      <td class="wt-label">Imbalance</td>
+                      <td class="wt-val" id="wye-imbalance">—</td>
+                      <td class="wt-unit">%</td>
+                    </tr>
+                    <tr><td colspan="3" class="wt-absorber"></td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+            </div><!-- /.wye-stats -->
+
+          </div><!-- /.wye-layout -->
+        </div><!-- /.chart-card -->
+      </section>
+
+    </div><!-- /#tab-electricity -->
+
+    <!-- ══ Tab 2: Usage & Cost ════════════════════════════════════════════ -->
+    <div id="tab-usage" role="tabpanel" aria-labelledby="tab-btn-usage" hidden>
+
+      <!-- Electricity usage: kWh/h per tariff -->
+      <section class="section" aria-labelledby="usage-elec-heading">
+        <h2 id="usage-elec-heading" class="section-title">Electricity Usage</h2>
+        <div class="chart-card">
+          <div class="power-card-header">
+            <div class="power-card-headline">
+              <span class="power-direction">Net usage</span>
+              <span class="power-value mono" id="usage-net-val">—</span>
+              <span class="power-unit">kWh</span>
+            </div>
+            <div class="power-card-deltas">
+              <span class="power-delta-in"  id="usage-delta-in"></span>
+              <span class="power-delta-out" id="usage-delta-out"></span>
+            </div>
+          </div>
+          <div class="chart-wrapper chart-wrapper--cost">
+            <canvas id="chart-usage" aria-label="Hourly electricity usage per tariff"></canvas>
           </div>
         </div>
-        <div class="chart-wrapper"><canvas id="chart-power" aria-label="Net power history"></canvas></div>
-      </div>
-    </section>
+      </section>
 
-    <!-- ── Voltage ── -->
-    <section class="section" aria-labelledby="voltage-heading">
-      <h2 id="voltage-heading" class="section-title">Voltage</h2>
-      <div class="cards-row cards-row--three">
-        <article class="card card--phase card--with-chart" id="card-v-l1">
-          <div class="phase-row">
-            <div class="phase-badge">L1</div>
-            <div class="phase-value-group">
-              <div class="card-value" id="voltage-l1">—</div>
-              <div class="card-unit">V</div>
+      <!-- Electricity cost: €/h -->
+      <section class="section" aria-labelledby="cost-heading">
+        <h2 id="cost-heading" class="section-title">Electricity Cost</h2>
+        <div class="chart-card">
+          <div class="power-card-header">
+            <div class="power-card-headline">
+              <span class="power-direction">Net cost</span>
+              <span class="power-value mono cost-import" id="cost-net-total">—</span>
+              <span class="power-unit">&euro;</span>
+            </div>
+            <div class="power-card-deltas">
+              <span class="power-delta-in"  id="cost-delta-in"></span>
+              <span class="power-delta-out" id="cost-delta-out"></span>
             </div>
           </div>
-          <div class="chart-wrapper chart-wrapper--inline">
-            <canvas id="chart-v-l1" aria-label="L1 voltage history"></canvas>
+          <div class="chart-wrapper chart-wrapper--cost">
+            <canvas id="chart-cost" aria-label="Hourly electricity cost"></canvas>
           </div>
-        </article>
-        <article class="card card--phase card--with-chart" id="card-v-l2">
-          <div class="phase-row">
-            <div class="phase-badge">L2</div>
-            <div class="phase-value-group">
-              <div class="card-value" id="voltage-l2">—</div>
-              <div class="card-unit">V</div>
-            </div>
-          </div>
-          <div class="chart-wrapper chart-wrapper--inline">
-            <canvas id="chart-v-l2" aria-label="L2 voltage history"></canvas>
-          </div>
-        </article>
-        <article class="card card--phase card--with-chart" id="card-v-l3">
-          <div class="phase-row">
-            <div class="phase-badge">L3</div>
-            <div class="phase-value-group">
-              <div class="card-value" id="voltage-l3">—</div>
-              <div class="card-unit">V</div>
-            </div>
-          </div>
-          <div class="chart-wrapper chart-wrapper--inline">
-            <canvas id="chart-v-l3" aria-label="L3 voltage history"></canvas>
-          </div>
-        </article>
-      </div>
-    </section>
+        </div>
+      </section>
 
-    <!-- ── Current ── -->
-    <section class="section" aria-labelledby="current-heading">
-      <h2 id="current-heading" class="section-title">Current</h2>
-      <div class="cards-row cards-row--three">
-        <article class="card card--phase card--with-chart" id="card-c-l1">
-          <div class="phase-row">
-            <div class="phase-badge">L1</div>
-            <div class="phase-value-group">
-              <div class="card-value" id="current-l1">—</div>
-              <div class="card-unit">A</div>
-            </div>
-          </div>
-          <div class="chart-wrapper chart-wrapper--inline">
-            <canvas id="chart-c-l1" aria-label="L1 current history"></canvas>
-          </div>
-        </article>
-        <article class="card card--phase card--with-chart" id="card-c-l2">
-          <div class="phase-row">
-            <div class="phase-badge">L2</div>
-            <div class="phase-value-group">
-              <div class="card-value" id="current-l2">—</div>
-              <div class="card-unit">A</div>
-            </div>
-          </div>
-          <div class="chart-wrapper chart-wrapper--inline">
-            <canvas id="chart-c-l2" aria-label="L2 current history"></canvas>
-          </div>
-        </article>
-        <article class="card card--phase card--with-chart" id="card-c-l3">
-          <div class="phase-row">
-            <div class="phase-badge">L3</div>
-            <div class="phase-value-group">
-              <div class="card-value" id="current-l3">—</div>
-              <div class="card-unit">A</div>
-            </div>
-          </div>
-          <div class="chart-wrapper chart-wrapper--inline">
-            <canvas id="chart-c-l3" aria-label="L3 current history"></canvas>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <!-- ── 3-phase wye phasor diagram ── -->
-    <section class="section" aria-labelledby="wye-heading">
-      <h2 id="wye-heading" class="section-title">3-Phase Wye System</h2>
-      <div class="chart-card wye-card">
-        <div class="wye-layout">
-
-          <!-- SVG phasor diagram -->
-          <div class="wye-diagram-wrap" aria-label="3-phase phasor diagram">
-            <canvas id="wye-canvas" aria-label="Wye phasor diagram"></canvas>
-          </div>
-
-          <!-- Stat tables -->
-          <div class="wye-stats">
-
-            <div class="wye-stats-group">
-              <div class="wye-stats-header">Phase voltages</div>
-              <table class="wye-table" id="wye-phase-table">
-                <thead><tr><th class="sr-only" scope="col">Phase</th><th class="sr-only" scope="col">Voltage</th><th class="sr-only" scope="col">Unit</th><th class="sr-only" scope="col">IEC delta</th></tr></thead>
-                <tbody>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l1"></span>L1</td>
-                    <td class="wt-val mono" id="wye-v-l1">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l1"></td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l2"></span>L2</td>
-                    <td class="wt-val mono" id="wye-v-l2">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l2"></td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l3"></span>L3</td>
-                    <td class="wt-val mono" id="wye-v-l3">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l3"></td>
-                  </tr>
-                </tbody>
-              </table>
+      <!-- Gas usage: m³/h -->
+      <section class="section" aria-labelledby="gas-heading">
+        <h2 id="gas-heading" class="section-title">Gas Usage</h2>
+        <div class="chart-card">
+          <div class="power-card-header">
+            <div class="power-card-headline">
+              <span class="power-direction">Gas used</span>
+              <span class="power-value mono" id="gas-total-val">—</span>
+              <span class="power-unit">m&sup3;</span>
             </div>
 
-            <div class="wye-stats-group">
-              <div class="wye-stats-header">Line differentials</div>
-              <table class="wye-table">
-                <thead><tr><th class="sr-only" scope="col">Phase pair</th><th class="sr-only" scope="col">Voltage</th><th class="sr-only" scope="col">Unit</th><th class="sr-only" scope="col">IEC delta</th></tr></thead>
-                <tbody>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l12"></span>L1–L2</td>
-                    <td class="wt-val mono" id="wye-diff-l12">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l12"></td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l13"></span>L1–L3</td>
-                    <td class="wt-val mono" id="wye-diff-l13">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l13"></td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label"><span class="wye-dot wye-dot--l23"></span>L2–L3</td>
-                    <td class="wt-val mono" id="wye-diff-l23">—</td>
-                    <td class="wt-unit">V</td>
-                    <td class="wt-ideal" id="wye-ideal-l23"></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          </div>
+          <div class="chart-wrapper chart-wrapper--cost">
+            <canvas id="chart-gas" aria-label="Hourly gas usage"></canvas>
+          </div>
+        </div>
+      </section>
 
-            <div class="wye-stats-group">
-              <div class="wye-stats-header">Neutral offset</div>
-              <table class="wye-table">
-                <thead><tr><th class="sr-only" scope="col">Metric</th><th class="sr-only" scope="col">Value</th><th class="sr-only" scope="col">Unit</th><th class="sr-only" scope="col">Diagram</th></tr></thead>
-                <tbody>
-                  <tr>
-                    <td class="wt-label">Magnitude</td>
-                    <td class="wt-val" id="wye-neutral-mag">—</td>
-                    <td class="wt-unit">V</td>
-                    <!-- Canvas spans 4 rows; the 4th empty row absorbs excess height -->
-                    <td class="wt-ideal wt-canvas-cell" rowspan="4">
-                      <div class="wye-neutral-mini-wrap">
-                        <canvas id="wye-neutral-canvas" aria-label="Neutral offset polar diagram"></canvas>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label">Angle</td>
-                    <td class="wt-val" id="wye-neutral-ang">—</td>
-                    <td class="wt-unit">°</td>
-                  </tr>
-                  <tr>
-                    <td class="wt-label">Imbalance</td>
-                    <td class="wt-val" id="wye-imbalance">—</td>
-                    <td class="wt-unit">%</td>
-                  </tr>
-                  <tr><td colspan="3" class="wt-absorber"></td></tr>
-                </tbody>
-              </table>
-            </div>
-
-          </div><!-- /.wye-stats -->
-
-        </div><!-- /.wye-layout -->
-      </div><!-- /.chart-card -->
-    </section>
+    </div><!-- /#tab-usage -->
 
   </main>
 

@@ -1020,3 +1020,94 @@ html, body {
     aspect-ratio: 1;
   }
 }
+
+/* ── Spot price panel ─────────────────────────────────────────────────── */
+
+.price-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-value--low  { color: var(--color-ok,   #34c77b); }
+.price-value--mid  { color: var(--color-warn,  #f0a500); }
+.price-value--high { color: var(--color-alert, #e05d5d); }
+
+.price-origin-badge {
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+  margin-left: 0.3em;
+}
+
+.chart-wrapper--cost {
+  height: 220px;
+}
+
+/* ── Tab bar ──────────────────────────────────────────────────────────── */
+
+/* Tab panels inherit the column layout of .main.
+   Scoped to :not([hidden]) so the hidden attribute still hides the panel. */
+[role="tabpanel"]:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin: 0 0 0.5rem;
+  padding: 0 var(--page-pad, 1.5rem);
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: -1px;   /* sit on top of .tab-bar border-bottom */
+  padding: 0.75rem 1.25rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn--active {
+  border-bottom-color: var(--accent-blue);
+  color: var(--text);
+}
+
+/* ── Cost chart net summary row ───────────────────────────────────────── */
+
+.cost-summary-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+}
+
+.cost-summary-sep {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.cost-summary-value {
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+}
+
+.cost-import        { color: var(--delivered-color); }
+.cost-export        { color: var(--returned-color);   }
+.cost-net--positive { color: var(--accent-red);       }
+.cost-net--negative { color: var(--accent-green);     }
