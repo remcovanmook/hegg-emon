@@ -476,7 +476,7 @@ function initCharts() {
         },
       ],
     },
-    options: _barOpts("€", v => `€${v.toFixed(3)}`, ctx => `${ctx.dataset.label}: €${Math.abs(ctx.parsed.y).toFixed(4)}`),
+    options: _barOpts("€", v => `€${v.toFixed(3)}`, ctx => `${ctx.dataset.label}: €${Math.abs(ctx.parsed.y).toFixed(4)}`, true),
   });
 
   // Hourly electricity usage: T1/T2 import (positive), T1/T2 export (negative).
