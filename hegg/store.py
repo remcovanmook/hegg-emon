@@ -99,18 +99,18 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events (ts);
 
 CREATE TABLE IF NOT EXISTS summaries (
-    id                  INTEGER PRIMARY KEY,
-    ts                  INTEGER NOT NULL UNIQUE,
-    serial              TEXT    NOT NULL,
-    sw_version          INTEGER,
-    equipment_id        TEXT,
-    model               TEXT,
-    wifi_rssi           INTEGER,
-    energy_delivered_t1 REAL,
-    energy_delivered_t2 REAL,
-    energy_returned_t1  REAL,
-    energy_returned_t2  REAL,
-    gas_delivered       REAL
+    id                       INTEGER PRIMARY KEY,
+    ts                       INTEGER NOT NULL UNIQUE,
+    serial                   TEXT    NOT NULL,
+    swVersion                INTEGER,
+    equipment_id             TEXT,
+    model                    TEXT,
+    wifiRSSI                 INTEGER,
+    energy_delivered_tariff1 REAL,
+    energy_delivered_tariff2 REAL,
+    energy_returned_tariff1  REAL,
+    energy_returned_tariff2  REAL,
+    gas_delivered            REAL
 );
 CREATE INDEX IF NOT EXISTS idx_summaries_ts ON summaries (ts);
 """
@@ -328,9 +328,9 @@ class HeggStore:
             self._conn().execute(
                 """
                 INSERT OR IGNORE INTO summaries
-                    (ts, serial, sw_version, equipment_id, model, wifi_rssi,
-                     energy_delivered_t1, energy_delivered_t2,
-                     energy_returned_t1, energy_returned_t2, gas_delivered)
+                    (ts, serial, swVersion, equipment_id, model, wifiRSSI,
+                     energy_delivered_tariff1, energy_delivered_tariff2,
+                     energy_returned_tariff1,  energy_returned_tariff2, gas_delivered)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
@@ -388,26 +388,26 @@ class HeggStore:
         """
         row = self._conn().execute(
             """
-            SELECT ts, serial, sw_version, equipment_id, model, wifi_rssi,
-                   energy_delivered_t1, energy_delivered_t2,
-                   energy_returned_t1, energy_returned_t2, gas_delivered
+            SELECT ts, serial, swVersion, equipment_id, model, wifiRSSI,
+                   energy_delivered_tariff1, energy_delivered_tariff2,
+                   energy_returned_tariff1,  energy_returned_tariff2, gas_delivered
             FROM summaries ORDER BY ts DESC LIMIT 1
             """
         ).fetchone()
         if row is None:
             return {}
         return {
-            "timestamp":           datetime.fromtimestamp(row[0] / 1000, tz=timezone.utc).isoformat(),
-            "serial":              row[1],
-            "sw_version":          row[2],
-            "equipment_id":        row[3],
-            "model":               row[4],
-            "wifi_rssi":           row[5],
-            "energy_delivered_t1": row[6],
-            "energy_delivered_t2": row[7],
-            "energy_returned_t1":  row[8],
-            "energy_returned_t2":  row[9],
-            "gas_delivered":       row[10],
+            "timestamp":               datetime.fromtimestamp(row[0] / 1000, tz=timezone.utc).isoformat(),
+            "serial":                  row[1],
+            "swVersion":               row[2],
+            "equipment_id":            row[3],
+            "model":                   row[4],
+            "wifiRSSI":                row[5],
+            "energy_delivered_tariff1": row[6],
+            "energy_delivered_tariff2": row[7],
+            "energy_returned_tariff1":  row[8],
+            "energy_returned_tariff2":  row[9],
+            "gas_delivered":            row[10],
         }
 
     def summary_delta(self, hours: int) -> dict:
@@ -430,16 +430,16 @@ class HeggStore:
         )
         oldest = self._conn().execute(
             """
-            SELECT energy_delivered_t1, energy_delivered_t2,
-                   energy_returned_t1,  energy_returned_t2, gas_delivered
+            SELECT energy_delivered_tariff1, energy_delivered_tariff2,
+                   energy_returned_tariff1,  energy_returned_tariff2, gas_delivered
             FROM summaries WHERE ts >= ? ORDER BY ts ASC LIMIT 1
             """,
             (since_ms,),
         ).fetchone()
         latest = self._conn().execute(
             """
-            SELECT energy_delivered_t1, energy_delivered_t2,
-                   energy_returned_t1,  energy_returned_t2, gas_delivered
+            SELECT energy_delivered_tariff1, energy_delivered_tariff2,
+                   energy_returned_tariff1,  energy_returned_tariff2, gas_delivered
             FROM summaries ORDER BY ts DESC LIMIT 1
             """
         ).fetchone()
@@ -449,11 +449,11 @@ class HeggStore:
         def _v(row, i): return row[i] or 0.0
 
         return {
-            "energy_delivered_t1": _v(latest, 0) - _v(oldest, 0),
-            "energy_delivered_t2": _v(latest, 1) - _v(oldest, 1),
-            "energy_returned_t1":  _v(latest, 2) - _v(oldest, 2),
-            "energy_returned_t2":  _v(latest, 3) - _v(oldest, 3),
-            "gas_delivered":       _v(latest, 4) - _v(oldest, 4),
+            "energy_delivered_tariff1": _v(latest, 0) - _v(oldest, 0),
+            "energy_delivered_tariff2": _v(latest, 1) - _v(oldest, 1),
+            "energy_returned_tariff1":  _v(latest, 2) - _v(oldest, 2),
+            "energy_returned_tariff2":  _v(latest, 3) - _v(oldest, 3),
+            "gas_delivered":            _v(latest, 4) - _v(oldest, 4),
         }
 
     def prune(self) -> int:

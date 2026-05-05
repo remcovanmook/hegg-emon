@@ -24,9 +24,9 @@ Line protocol measurements
 ``hegg_summary`` — written on every minute-summary packet.
 
   Tags:   ``serial``
-  Fields: ``energy_delivered_t1``, ``energy_delivered_t2``,
-          ``energy_returned_t1``, ``energy_returned_t2``,
-          ``gas_delivered``, ``wifi_rssi``
+  Fields: ``energy_delivered_tariff1``, ``energy_delivered_tariff2``,
+          ``energy_returned_tariff1``, ``energy_returned_tariff2``,
+          ``gas_delivered``, ``wifiRSSI``
 """
 
 import logging
@@ -170,9 +170,9 @@ class InfluxPublisher:
         ts_ns = int(ts_raw * 1_000_000) if ts_raw else 0  # ts is stored as Unix ms
 
         fields = {}
-        for key in ("energy_delivered_t1", "energy_delivered_t2",
-                    "energy_returned_t1", "energy_returned_t2",
-                    "gas_delivered", "wifi_rssi"):
+        for key in ("energy_delivered_tariff1", "energy_delivered_tariff2",
+                    "energy_returned_tariff1",  "energy_returned_tariff2",
+                    "gas_delivered", "wifiRSSI"):
             val = summary.get(key)
             if val is not None:
                 fields[key] = val
