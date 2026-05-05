@@ -113,6 +113,14 @@ CREATE TABLE IF NOT EXISTS summaries (
     gas_delivered            REAL
 );
 CREATE INDEX IF NOT EXISTS idx_summaries_ts ON summaries (ts);
+
+CREATE TABLE IF NOT EXISTS prices (
+    ts_start      INTEGER NOT NULL UNIQUE,  -- Unix ms, start of hour (UTC)
+    ts_end        INTEGER NOT NULL,         -- Unix ms, end of hour (UTC)
+    price_eur_kwh REAL    NOT NULL,         -- raw EPEX spot price in EUR/kWh
+    price_origin  TEXT    NOT NULL          -- 'actual' or 'forecast'
+);
+CREATE INDEX IF NOT EXISTS idx_prices_ts ON prices (ts_start);
 """
 
 _INSERT = """
@@ -472,3 +480,94 @@ class HeggStore:
             cur3 = conn.execute("DELETE FROM summaries WHERE ts < ?", (cutoff_ms,))
             conn.commit()
         return cur1.rowcount + cur2.rowcount + cur3.rowcount
+
+    # ------------------------------------------------------------------
+    # Price methods
+    # ------------------------------------------------------------------
+
+    def insert_prices(self, rows: list) -> None:
+        """Store hourly price rows fetched from the energyforecast.de API.
+
+        Uses ``INSERT OR REPLACE`` so forecast entries are overwritten when
+        the same hour's actual price becomes available on a subsequent fetch.
+
+        Args:
+            rows: List of dicts with keys ``ts_start`` (Unix ms), ``ts_end``
+                  (Unix ms), ``price_eur_kwh`` (float), ``price_origin`` (str).
+        """
+        with self._write_lock:
+            conn = self._conn()
+            conn.executemany(
+                """INSERT OR REPLACE INTO prices
+                       (ts_start, ts_end, price_eur_kwh, price_origin)
+                   VALUES (?, ?, ?, ?)""",
+                [
+                    (r["ts_start"], r["ts_end"], r["price_eur_kwh"], r["price_origin"])
+                    for r in rows
+                ],
+            )
+            conn.commit()
+
+    def current_price(self) -> dict:
+        """Return the price entry whose window covers the current UTC moment.
+
+        Returns:
+            Dict with keys ``ts_start``, ``ts_end``, ``price_eur_kwh``,
+            ``price_origin``, or ``{}`` if no matching row exists.
+        """
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        row = self._conn().execute(
+            """SELECT ts_start, ts_end, price_eur_kwh, price_origin
+               FROM prices
+               WHERE ts_start <= ? AND ts_end > ?
+               ORDER BY ts_start DESC LIMIT 1""",
+            (now_ms, now_ms),
+        ).fetchone()
+        if row is None:
+            return {}
+        return {
+            "ts_start":      row[0],
+            "ts_end":        row[1],
+            "price_eur_kwh": row[2],
+            "price_origin":  row[3],
+        }
+
+    def prices_window(self, hours: int = 48) -> list:
+        """Return price entries covering the next *hours* hours from now.
+
+        Args:
+            hours: Look-ahead window in hours (default 48).
+
+        Returns:
+            List of price dicts ordered by ``ts_start`` ascending.
+        """
+        now_ms   = int(datetime.now(timezone.utc).timestamp() * 1000)
+        until_ms = now_ms + hours * 3_600_000
+        rows = self._conn().execute(
+            """SELECT ts_start, ts_end, price_eur_kwh, price_origin
+               FROM prices
+               WHERE ts_start >= ? AND ts_start < ?
+               ORDER BY ts_start ASC""",
+            (now_ms, until_ms),
+        ).fetchall()
+        return [
+            {
+                "ts_start":      r[0],
+                "ts_end":        r[1],
+                "price_eur_kwh": r[2],
+                "price_origin":  r[3],
+            }
+            for r in rows
+        ]
+
+    def has_current_prices(self) -> bool:
+        """Return True if the DB contains a price entry for the current hour.
+
+        Used by :class:`~hegg.price_fetcher.PriceFetcher` to decide whether
+        to skip the startup fetch.
+
+        Returns:
+            ``True`` if a current price exists, ``False`` otherwise.
+        """
+        return bool(self.current_price())
+

@@ -361,8 +361,16 @@ class MiniHandler(BaseHTTPRequestHandler):
             }
             _json_response(self, info)
 
+        # ── API: prices (not available in mini mode) ───────────────────────
+        elif path in ("/api/prices", "/api/prices/current"):
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error":"pricing not available in mini mode"}')
+
         else:
             _not_found(self)
+
 
     def _handle_stream(self) -> None:
         """Handle an SSE ``/stream`` request.

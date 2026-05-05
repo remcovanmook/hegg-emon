@@ -340,6 +340,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     currentL2:      document.getElementById("current-l2"),
     currentL3:      document.getElementById("current-l3"),
     historyRange:   document.getElementById("history-range"),
+    pricePanel:     document.getElementById("price-panel"),
+    priceCurrentCt: document.getElementById("price-current-ct"),
+    priceCostRate:  document.getElementById("price-cost-rate"),
+    priceDayRange:  document.getElementById("price-day-range"),
+    priceOriginBadge: document.getElementById("price-origin-badge"),
   };
 
   initCharts();
@@ -372,6 +377,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Minute-level refresh for absolute values; device info is static.
   setInterval(loadSummary, 60_000);
   setInterval(loadDevice,  300_000);
+
+  // Price: load on startup, then every 15 minutes.
+  // The data changes at most once per hour (on the hour boundary) so
+  // 15-minute polling ensures the displayed price is always current
+  // without making more than ~96 requests per day.
+  loadCurrentPrice();
+  setInterval(loadCurrentPrice, 15 * 60_000);
 
   // Clock — updates every second.
   const tickClock = () => setText("header-time", new Date().toLocaleTimeString());
@@ -643,6 +655,97 @@ function setEnergyDelta(id, value, period, unit) {
   e.className   = `energy-delta ${value >= 0 ? "energy-delta--pos" : "energy-delta--neg"}`;
 }
 
+/* ── Spot price ─────────────────────────────────────────────────────────── */
+
+/**
+ * Current EPEX spot price in EUR/kWh, or null when unavailable.
+ * Updated by loadCurrentPrice(); read by applyReading() for cost-rate display.
+ * @type {number|null}
+ */
+let _currentPriceEurKwh = null;
+
+/**
+ * Fetch the current hour's price and the 24-hour window from the API,
+ * then update the price panel in the summary strip.
+ *
+ * The panel is hidden (via the HTML `hidden` attribute) when no price data
+ * is available; it becomes visible on the first successful response.
+ */
+async function loadCurrentPrice() {
+  let current, window24;
+  try {
+    const [rCurrent, rWindow] = await Promise.all([
+      fetch("/api/prices/current"),
+      fetch("/api/prices?hours=24"),
+    ]);
+    if (!rCurrent.ok || rCurrent.status === 204) return;
+    current  = await rCurrent.json();
+    window24 = rWindow.ok && rWindow.status !== 204 ? await rWindow.json() : [];
+  } catch {
+    return;
+  }
+
+  _currentPriceEurKwh = current.price_eur_kwh ?? null;
+  if (_currentPriceEurKwh === null) return;
+
+  const ctNow = (_currentPriceEurKwh * 100).toFixed(2);
+
+  // Day min / max from the 24-hour window.
+  let minCt = null, maxCt = null;
+  if (window24.length > 0) {
+    const prices = window24.map(p => p.price_eur_kwh * 100);
+    minCt = Math.min(...prices).toFixed(1);
+    maxCt = Math.max(...prices).toFixed(1);
+  }
+
+  // Colour the current price relative to the day range.
+  if (el.priceCurrentCt) {
+    el.priceCurrentCt.textContent = ctNow;
+    el.priceCurrentCt.className   = "price-value";
+    if (minCt !== null && maxCt !== null) {
+      const range = parseFloat(maxCt) - parseFloat(minCt);
+      const pos   = range > 0
+        ? (parseFloat(ctNow) - parseFloat(minCt)) / range
+        : 0.5;
+      el.priceCurrentCt.classList.add(
+        pos < 0.33 ? "price-value--low" : pos < 0.67 ? "price-value--mid" : "price-value--high"
+      );
+    }
+  }
+
+  if (el.priceDayRange && minCt !== null) {
+    el.priceDayRange.textContent = `${minCt} – ${maxCt}`;
+  }
+
+  if (el.priceOriginBadge) {
+    el.priceOriginBadge.textContent = current.price_origin === "actual" ? "actual" : "forecast";
+  }
+
+  // Show the panel now that we have data.
+  if (el.pricePanel) el.pricePanel.hidden = false;
+
+  // Trigger a cost-rate update using the last-known power draw.
+  _updateCostRate();
+}
+
+/**
+ * Recompute and display the estimated cost rate in €/h.
+ *
+ * Uses the module-level ``_currentPriceEurKwh`` and the live
+ * ``power_delivered`` value from the most recent SSE reading.
+ *
+ * Called by loadCurrentPrice() and by applyReading() on every reading.
+ *
+ * @param {number} [deliveredKw] - Current import power in kW.  When omitted,
+ *   the function only clears the field if no price is available.
+ */
+function _updateCostRate(deliveredKw) {
+  if (!el.priceCostRate) return;
+  if (_currentPriceEurKwh === null || deliveredKw == null) return;
+  const rate = (_currentPriceEurKwh * deliveredKw).toFixed(3);
+  el.priceCostRate.textContent = rate;
+}
+
 /* ── SSE ────────────────────────────────────────────────────────────────── */
 
 let eventSource = null;
@@ -687,6 +790,9 @@ function setStatus(state, label) {
 function applyReading(r) {
   const delivered = r.power_delivered ?? 0;
   const returned  = r.power_returned  ?? 0;
+
+  // Update cost-rate display whenever a new reading arrives.
+  _updateCostRate(delivered);
 
   if (delivered > returned) {
     el.powerDisplay.className     = "power-display power-display--import";

@@ -1020,3 +1020,23 @@ html, body {
     aspect-ratio: 1;
   }
 }
+
+/* ── Spot price panel ─────────────────────────────────────────────────── */
+
+.price-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-value--low  { color: var(--color-ok,   #34c77b); }
+.price-value--mid  { color: var(--color-warn,  #f0a500); }
+.price-value--high { color: var(--color-alert, #e05d5d); }
+
+.price-origin-badge {
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+  margin-left: 0.3em;
+}

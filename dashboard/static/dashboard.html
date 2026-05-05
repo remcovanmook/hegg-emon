@@ -126,6 +126,28 @@
           </table>
         </div>
 
+        <!-- Price (hidden until price data is available) -->
+        <div class="summary-item" id="price-panel" hidden>
+          <div class="summary-item-header">Spot Price <span class="price-origin-badge" id="price-origin-badge"></span></div>
+          <table class="summary-table">
+            <thead><tr><th class="sr-only" scope="col">Metric</th><th class="sr-only" scope="col">Value</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="st-label">Now</td>
+                <td class="st-energy"><span id="price-current-ct" class="price-value">—</span> ct/kWh</td>
+              </tr>
+              <tr>
+                <td class="st-label">Cost rate</td>
+                <td class="st-energy st-energy--sub"><span id="price-cost-rate">—</span> €/h</td>
+              </tr>
+              <tr>
+                <td class="st-label">Day range</td>
+                <td class="st-energy st-energy--sub"><span id="price-day-range">—</span> ct/kWh</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
       </div>
     </section>
 

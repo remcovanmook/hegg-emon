@@ -108,6 +108,42 @@ def api_device() -> Response:
     return jsonify(info)
 
 
+@app.route("/api/prices", methods=["GET"])
+def api_prices() -> Response:
+    """Return day-ahead price entries for the next 48 hours.
+
+    Query parameters:
+        hours: Look-ahead window in hours (default 48, max 96).
+
+    Each entry has ``ts_start`` (Unix ms), ``ts_end`` (Unix ms),
+    ``price_eur_kwh`` (raw EPEX spot, no VAT/fees), and ``price_origin``
+    (``"actual"`` or ``"forecast"``).  Returns 204 when no data is stored.
+    """
+    if _store is None:
+        return Response(status=204)
+    hours = min(int(request.args.get("hours", 48)), 96)
+    rows = _store.prices_window(hours=hours)
+    if not rows:
+        return Response(status=204)
+    return jsonify(rows)
+
+
+@app.route("/api/prices/current", methods=["GET"])
+def api_prices_current() -> Response:
+    """Return the price entry covering the current UTC hour.
+
+    Returns 204 when no price is available (fetcher not configured or
+    has not run yet).
+    """
+    if _store is None:
+        return Response(status=204)
+    price = _store.current_price()
+    if not price:
+        return Response(status=204)
+    return jsonify(price)
+
+
+
 @app.route("/api/events", methods=["GET"])
 def api_events() -> Response:
     """Return recent unknown/raw event packets, newest first (debug endpoint)."""
