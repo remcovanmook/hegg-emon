@@ -370,13 +370,14 @@ class HeggStore:
         if oldest is None or latest is None:
             return {}
 
-        def _sum(row, i, j):
-            return (row[i] or 0.0) + (row[j] or 0.0)
+        def _v(row, i): return row[i] or 0.0
 
         return {
-            "energy_delivered": _sum(latest, 0, 1) - _sum(oldest, 0, 1),
-            "energy_returned":  _sum(latest, 2, 3) - _sum(oldest, 2, 3),
-            "gas_delivered":    (latest[4] or 0.0) - (oldest[4] or 0.0),
+            "energy_delivered_t1": _v(latest, 0) - _v(oldest, 0),
+            "energy_delivered_t2": _v(latest, 1) - _v(oldest, 1),
+            "energy_returned_t1":  _v(latest, 2) - _v(oldest, 2),
+            "energy_returned_t2":  _v(latest, 3) - _v(oldest, 3),
+            "gas_delivered":       _v(latest, 4) - _v(oldest, 4),
         }
 
     def prune(self) -> int:

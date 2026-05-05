@@ -42,21 +42,33 @@
 
   <main class="main">
 
-    <!-- ── Summary strip (from latest minute packet) ── -->
+    <!-- ── Summary strip ── -->
     <section class="section section--summary" aria-labelledby="summary-heading">
       <h1 id="summary-heading" class="sr-only">Summary</h1>
-      <div class="summary-strip" id="summary-strip">
-        <div class="summary-item">
-          <div class="summary-label">Energy in</div>
-          <div class="summary-value" id="energy-in">—</div>
+      <div class="summary-strip">
+        <div class="summary-item summary-item--tariff">
+          <div class="summary-label">Energy in T1</div>
+          <div class="summary-value" id="energy-in-t1">—</div>
           <div class="summary-unit">kWh</div>
-          <span class="summary-delta" id="energy-in-delta"></span>
+          <span class="summary-delta" id="energy-in-t1-delta"></span>
         </div>
-        <div class="summary-item">
-          <div class="summary-label">Energy out</div>
-          <div class="summary-value" id="energy-out">—</div>
+        <div class="summary-item summary-item--tariff">
+          <div class="summary-label">Energy in T2</div>
+          <div class="summary-value" id="energy-in-t2">—</div>
           <div class="summary-unit">kWh</div>
-          <span class="summary-delta" id="energy-out-delta"></span>
+          <span class="summary-delta" id="energy-in-t2-delta"></span>
+        </div>
+        <div class="summary-item summary-item--tariff">
+          <div class="summary-label">Energy out T1</div>
+          <div class="summary-value" id="energy-out-t1">—</div>
+          <div class="summary-unit">kWh</div>
+          <span class="summary-delta" id="energy-out-t1-delta"></span>
+        </div>
+        <div class="summary-item summary-item--tariff">
+          <div class="summary-label">Energy out T2</div>
+          <div class="summary-value" id="energy-out-t2">—</div>
+          <div class="summary-unit">kWh</div>
+          <span class="summary-delta" id="energy-out-t2-delta"></span>
         </div>
         <div class="summary-item">
           <div class="summary-label">Gas</div>
@@ -64,21 +76,16 @@
           <div class="summary-unit">m³</div>
           <span class="summary-delta" id="gas-delta"></span>
         </div>
-        <div class="summary-item">
-          <div class="summary-label">Model</div>
-          <div class="summary-value summary-value--sm" id="device-model">—</div>
-        </div>
-        <div class="summary-item">
-          <div class="summary-label">WiFi</div>
-          <div class="summary-value summary-value--sm" id="device-rssi">—</div>
-        </div>
-        <div class="summary-item">
-          <div class="summary-label">SW</div>
-          <div class="summary-value summary-value--sm" id="device-sw">—</div>
-        </div>
-        <div class="summary-item summary-item--updated">
+        <div class="summary-item summary-item--device">
           <div class="summary-label">Device</div>
-          <div class="summary-value summary-value--sm" id="device-serial">—</div>
+          <div class="summary-value summary-value--sm" id="device-model">—</div>
+          <div class="summary-unit" id="device-ip">—</div>
+          <div class="summary-unit" id="device-serial">—</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Signal</div>
+          <div class="summary-value summary-value--sm" id="device-rssi">—</div>
+          <div class="summary-unit">SW <span id="device-sw">—</span></div>
         </div>
       </div>
     </section>
@@ -86,8 +93,6 @@
     <!-- ── Power ── -->
     <section class="section" aria-labelledby="power-heading">
       <h2 id="power-heading" class="section-title">Power</h2>
-
-      <!-- Single import/export display -->
       <div class="power-display" id="power-display">
         <div class="power-direction" id="power-direction">—</div>
         <div class="power-value-row">
@@ -95,7 +100,6 @@
           <span class="power-unit">W</span>
         </div>
       </div>
-
       <div class="chart-card">
         <div class="chart-label">Power over time</div>
         <div class="chart-wrapper"><canvas id="chart-power" aria-label="Net power history"></canvas></div>
@@ -145,29 +149,46 @@
       </div>
     </section>
 
-    <!-- ── Current ── -->
+    <!-- ── Current (inline charts per phase) ── -->
     <section class="section" aria-labelledby="current-heading">
       <h2 id="current-heading" class="section-title">Current</h2>
       <div class="cards-row cards-row--three">
-        <article class="card card--phase" id="card-c-l1">
-          <div class="phase-badge">L1</div>
-          <div class="card-value" id="current-l1">—</div>
-          <div class="card-unit">A</div>
+        <article class="card card--phase card--with-chart" id="card-c-l1">
+          <div class="phase-row">
+            <div class="phase-badge">L1</div>
+            <div class="phase-value-group">
+              <div class="card-value" id="current-l1">—</div>
+              <div class="card-unit">A</div>
+            </div>
+          </div>
+          <div class="chart-wrapper chart-wrapper--inline">
+            <canvas id="chart-c-l1" aria-label="L1 current history"></canvas>
+          </div>
         </article>
-        <article class="card card--phase" id="card-c-l2">
-          <div class="phase-badge">L2</div>
-          <div class="card-value" id="current-l2">—</div>
-          <div class="card-unit">A</div>
+        <article class="card card--phase card--with-chart" id="card-c-l2">
+          <div class="phase-row">
+            <div class="phase-badge">L2</div>
+            <div class="phase-value-group">
+              <div class="card-value" id="current-l2">—</div>
+              <div class="card-unit">A</div>
+            </div>
+          </div>
+          <div class="chart-wrapper chart-wrapper--inline">
+            <canvas id="chart-c-l2" aria-label="L2 current history"></canvas>
+          </div>
         </article>
-        <article class="card card--phase" id="card-c-l3">
-          <div class="phase-badge">L3</div>
-          <div class="card-value" id="current-l3">—</div>
-          <div class="card-unit">A</div>
+        <article class="card card--phase card--with-chart" id="card-c-l3">
+          <div class="phase-row">
+            <div class="phase-badge">L3</div>
+            <div class="phase-value-group">
+              <div class="card-value" id="current-l3">—</div>
+              <div class="card-unit">A</div>
+            </div>
+          </div>
+          <div class="chart-wrapper chart-wrapper--inline">
+            <canvas id="chart-c-l3" aria-label="L3 current history"></canvas>
+          </div>
         </article>
-      </div>
-      <div class="chart-card">
-        <div class="chart-label">Current per phase — <span class="chart-legend"><span class="leg l1"></span>L1 <span class="leg l2"></span>L2 <span class="leg l3"></span>L3</span></div>
-        <div class="chart-wrapper"><canvas id="chart-current" aria-label="Current history"></canvas></div>
       </div>
     </section>
 
@@ -179,7 +200,6 @@
     </div>
   </footer>
 
-  <!-- Chart.js + date adapter + annotation plugin -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>

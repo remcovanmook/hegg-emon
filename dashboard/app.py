@@ -51,6 +51,7 @@ app = Flask(__name__)
 
 _latest_reading: Optional[HeggReading] = None
 _latest_lock = threading.Lock()
+_device_ip: str = ""  # set when the listener locks onto a source
 
 # SQLite store — initialised by create_app().
 _store: Optional[HeggStore] = None
@@ -141,6 +142,8 @@ def _run_listener(port: int, extra_handlers: List[Callable],
                     continue
             else:
                 locked_ip = src_ip
+                global _device_ip
+                _device_ip = src_ip
                 logger.info("Locked onto Hegg device at %s:%d", src_ip, src_port)
 
             try:
@@ -222,6 +225,19 @@ def api_summary_latest() -> Response:
     if not summary:
         return Response(status=204)
     return jsonify(summary)
+@app.route("/api/device")
+def api_device() -> Response:
+    """Return device identity: locked IP, serial, model from latest summary."""
+    info: dict = {"ip": _device_ip or None}
+    if _store is not None:
+        s = _store.latest_summary()
+        info["serial"]  = s.get("serial")
+        info["model"]   = s.get("model")
+        info["sw"]      = s.get("sw_version")
+        info["wifi_rssi"] = s.get("wifi_rssi")
+    return jsonify(info)
+
+
 
 
 @app.route("/api/events")
