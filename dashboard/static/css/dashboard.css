@@ -362,9 +362,14 @@ html, body {
 .leg.l2 { background: var(--phase-l2); }
 .leg.l3 { background: var(--phase-l3); }
 
-.chart-card canvas {
-  width: 100% !important;
-  height: 250px;
+.chart-wrapper {
+  position: relative;
+  height: 240px;
+  width: 100%;
+}
+
+.chart-wrapper canvas {
+  /* Let Chart.js control dimensions — no height here. */
   display: block;
 }
 

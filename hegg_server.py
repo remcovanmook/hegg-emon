@@ -131,17 +131,24 @@ def main() -> None:
         args.udp_port, args.http_port, args.prometheus_port,
     )
 
-    # Build Prometheus exporter first so we can pass its handler to the
-    # dashboard's UDP listener.  This avoids two sockets competing for the
-    # same UDP port.
-    from hegg.prometheus_exporter import HeggExporter
-    exporter = HeggExporter(metrics_port=args.prometheus_port)
-    exporter.start_http_server()
+    # Build Prometheus exporter — optional; requires prometheus_client.
+    extra_handlers: list = []
+    try:
+        from hegg.prometheus_exporter import HeggExporter
+        exporter = HeggExporter(metrics_port=args.prometheus_port)
+        exporter.start_http_server()
+        extra_handlers.append(exporter.handle)
+        logger.info("Prometheus exporter active on port %d", args.prometheus_port)
+    except ImportError:
+        logger.warning(
+            "prometheus_client not installed — Prometheus exporter disabled. "
+            "Install with: pip install prometheus_client"
+        )
 
-    # Dashboard (+ Prometheus handler) runs in a daemon thread.
+    # Dashboard (+ optional Prometheus handler) runs in a daemon thread.
     dash_thread = threading.Thread(
         target=start_dashboard,
-        args=(args.http_port, args.udp_port, args.debug, [exporter.handle]),
+        args=(args.http_port, args.udp_port, args.debug, extra_handlers),
         daemon=True,
         name="hegg-dashboard",
     )
