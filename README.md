@@ -32,11 +32,11 @@ Create the database directory and a system user:
 sudo useradd -r -s /bin/false hegg
 sudo mkdir -p /var/lib/hegg
 sudo chown hegg:hegg /var/lib/hegg
-sudo mkdir -p /etc/hegg
-sudo cp /opt/hegg/etc/hegg.conf /etc/hegg/hegg.conf
+sudo cp /opt/hegg/etc/default/hegg /etc/default/hegg
 ```
 
-Edit `/etc/hegg/hegg.conf` and set at minimum `HEGG_DEVICE_IP`.
+Edit `/etc/default/hegg` to set `HEGG_DB` and optionally `HEGG_DEVICE_IP`
+(leave it unset to auto-detect the first Hegg device seen on the network).
 
 ---
 
@@ -89,7 +89,7 @@ Set in `/etc/hegg/hegg.conf` (for service deployments) or as CLI flags:
 
 | Variable / Flag | Default | Description |
 |---|---|---|
-| `HEGG_DEVICE_IP` / `--device-ip` | _(auto)_ | Lock collector to this source IP |
+| `HEGG_DEVICE_IP` / `--device-ip` | _(auto)_ | Lock collector to this source IP; auto-detects if unset |
 | `HEGG_DB` / `--db` | `hegg.db` | SQLite database path |
 | `HEGG_UDP_PORT` / `--udp-port` | `16121` | UDP port to bind |
 | `HEGG_HTTP_PORT` / `--http-port` | `8080` | Dashboard HTTP port |
@@ -179,7 +179,8 @@ dashboard/
   static/js/dashboard.js
 
 etc/
-  hegg.conf             Environment variable template
+  default/
+    hegg                  Environment defaults (/etc/default/hegg)
   systemd/              systemd service units
     hegg.service          all-in-one
     hegg-collector.service

@@ -13,7 +13,7 @@ Environment=HEGG_DB=/var/lib/hegg/hegg.db
 ExecStart=/opt/hegg/.venv/bin/python /opt/hegg/hegg_collector.py \
     --device-ip ${HEGG_DEVICE_IP} \
     --db ${HEGG_DB}
-EnvironmentFile=-/etc/hegg/hegg.conf
+EnvironmentFile=-/etc/default/hegg
 Restart=on-failure
 RestartSec=5
 

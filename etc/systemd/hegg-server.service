@@ -12,7 +12,7 @@ WorkingDirectory=/opt/hegg
 Environment=HEGG_DB=/var/lib/hegg/hegg.db
 ExecStart=/opt/hegg/.venv/bin/python -m dashboard.app \
     --db ${HEGG_DB}
-EnvironmentFile=-/etc/hegg/hegg.conf
+EnvironmentFile=-/etc/default/hegg
 Restart=on-failure
 RestartSec=5
 

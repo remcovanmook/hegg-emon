@@ -12,7 +12,7 @@ WorkingDirectory=/opt/hegg
 Environment=HEGG_DB=/var/lib/hegg/hegg.db
 ExecStart=/opt/hegg/.venv/bin/python /opt/hegg/hegg_mqtt.py \
     --db ${HEGG_DB}
-EnvironmentFile=-/etc/hegg/hegg.conf
+EnvironmentFile=-/etc/default/hegg
 Restart=on-failure
 RestartSec=5
 

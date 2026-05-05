@@ -17,7 +17,7 @@ PYTHON="$INSTALL_DIR/.venv/bin/python"
 DAEMON="$PYTHON $INSTALL_DIR/hegg_server.py"
 PIDFILE="/var/run/hegg.pid"
 LOGFILE="/var/log/hegg.log"
-CONFIG="/etc/hegg/hegg.conf"
+CONFIG="/etc/default/hegg"
 
 # Load config if present
 [ -f "$CONFIG" ] && . "$CONFIG"

@@ -1,0 +1,26 @@
+# /etc/default/hegg
+#
+# Default environment variables for the hegg service units.
+# Uncomment and set values as needed.
+
+# Lock the collector to a specific Hegg device IP.
+# Leave empty to auto-detect the first device seen on the network.
+# HEGG_DEVICE_IP=192.168.1.42
+
+# Path to the shared SQLite database.
+HEGG_DB=/var/lib/hegg/hegg.db
+
+# UDP port the Hegg device broadcasts on (default: 16121).
+# HEGG_UDP_PORT=16121
+
+# Dashboard HTTP port (default: 8080).
+# HEGG_HTTP_PORT=8080
+
+# Prometheus metrics port (default: 9101).
+# HEGG_PROMETHEUS_PORT=9101
+
+# MQTT broker for Home Assistant integration (hegg-mqtt only).
+# HEGG_MQTT_HOST=192.168.1.10
+# HEGG_MQTT_PORT=1883
+# HEGG_MQTT_USER=
+# HEGG_MQTT_PASS=
