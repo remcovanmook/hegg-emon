@@ -1417,8 +1417,8 @@ function updateWyeDiagram(v1, v2, v3) {
   setPhaseIdeal("wye-ideal-l3", v3);
 
   // Line differentials.
-  const mean   = (v1 + v2 + v3) / 3;
-  const ideal  = mean * Math.sqrt(3);          // ideal LL for a balanced system
+  // IEC 60038 nominal line-to-line voltage for a 230/400 V system.
+  const IEC_LL = 400;
   const ll12   = lineVoltage(v1, v2);
   const ll13   = lineVoltage(v1, v3);
   const ll23   = lineVoltage(v2, v3);
@@ -1427,18 +1427,26 @@ function updateWyeDiagram(v1, v2, v3) {
   setText("wye-diff-l13", ll13.toFixed(1));
   setText("wye-diff-l23", ll23.toFixed(1));
 
-  // Delta from ideal for each LL pair.
-  const setIdeal = (id, actual) => {
+  /**
+   * Set a line-differential IEC delta cell.
+   * Shows the absolute deviation from the IEC 60038 nominal VLL (400 V)
+   * and the percentage in parentheses, matching the phase voltage format.
+   * @param {string} id
+   * @param {number} actual - Measured line-to-line voltage.
+   */
+  const setLlIdeal = (id, actual) => {
     const e = document.getElementById(id);
     if (!e) return;
-    const delta = actual - ideal;
-    const sign  = delta >= 0 ? "+" : "";
-    e.textContent = `${sign}${delta.toFixed(1)} V vs ideal`;
+    const delta   = actual - IEC_LL;
+    const pct     = (delta / IEC_LL) * 100;
+    const sign    = delta >= 0 ? "+" : "";
+    const pctSign = pct   >= 0 ? "+" : "";
+    e.textContent = `${sign}${delta.toFixed(1)} V vs IEC (${pctSign}${pct.toFixed(1)}%)`;
     e.className   = `wt-ideal ${delta >= 0 ? "wt-ideal--pos" : "wt-ideal--neg"}`;
   };
-  setIdeal("wye-ideal-l12", ll12);
-  setIdeal("wye-ideal-l13", ll13);
-  setIdeal("wye-ideal-l23", ll23);
+  setLlIdeal("wye-ideal-l12", ll12);
+  setLlIdeal("wye-ideal-l13", ll13);
+  setLlIdeal("wye-ideal-l23", ll23);
 
   // Neutral offset.
   const ns    = neutralShift(v1, v2, v3);
