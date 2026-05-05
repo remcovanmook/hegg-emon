@@ -147,7 +147,7 @@ function makeInlineOpts(tickFmt, unit = "") {
         display: true,
         position: "left",
         ticks: {
-          maxTicksLimit: 3,
+          maxTicksLimit: 10,   // let stepSize from syncChartScales control density
           color: "#6b7490",
           font: { size: 9 },
           ...(tickFmt ? { callback: tickFmt } : {}),
@@ -521,9 +521,9 @@ async function loadHistory(hours) {
   });
 
   voltageCharts.forEach((_, i) => updateVoltageAnnotation(i));
-  syncChartScales(voltageCharts, voltageExtremes, 2);
+  syncChartScales(voltageCharts, voltageExtremes);
   // minFloor=0 prevents the current Y axis from going negative.
-  syncChartScales(currentCharts, currentExtremes, 0.5, 0);
+  syncChartScales(currentCharts, currentExtremes, 0);
 
   applyXAxisConfig(hours);
 
@@ -763,7 +763,7 @@ function appendToCharts(r) {
     if (v < voltageExtremes[i].min) { voltageExtremes[i].min = v; updateVoltageAnnotation(i); }
     if (v > voltageExtremes[i].max) { voltageExtremes[i].max = v; updateVoltageAnnotation(i); }
   });
-  syncChartScales(voltageCharts, voltageExtremes, 2);
+  syncChartScales(voltageCharts, voltageExtremes);
 
   // Current — smoothed for chart, raw for extremes.
   ["current_l1", "current_l2", "current_l3"].forEach((f, i) => {
@@ -773,7 +773,7 @@ function appendToCharts(r) {
     if (v > currentExtremes[i].max) currentExtremes[i].max = v;
   });
   // minFloor=0 prevents the current Y axis from going negative.
-  syncChartScales(currentCharts, currentExtremes, 0.5, 0);
+  syncChartScales(currentCharts, currentExtremes, 0);
 
   const cutoff = Date.now() - selectedHours * 3600 * 1000;
   trimOldPoints(powerChart, cutoff);
@@ -865,26 +865,77 @@ function applyXAxisConfig(hours) {
 }
 
 /**
- * Compute the union Y-axis range across all per-phase extremes and apply the
- * same min/max to every chart in the group, keeping L1/L2/L3 visually
- * comparable on the same scale.
+ * Compute a "nice" Y-axis scale whose boundaries and step are multiples of
+ * 1, 2, 5, or 10 at the appropriate power of ten, with at most maxIntervals
+ * tick intervals (grid cells).
+ *
+ * Algorithm:
+ *   1. roughStep = range / maxIntervals
+ *   2. magnitude = largest power of 10 ≤ roughStep
+ *   3. normalised  = roughStep / magnitude
+ *   4. step = smallest nice multiplier (1, 2, 5, 10) ≥ normalised
+ *   5. min/max rounded down/up to the nearest multiple of step
+ *
+ * @param {number} rawMin
+ * @param {number} rawMax
+ * @param {number} [maxIntervals=5]
+ * @returns {{ min: number, max: number, step: number }}
+ */
+function niceScale(rawMin, rawMax, maxIntervals = 5) {
+  if (!isFinite(rawMin) || !isFinite(rawMax) || rawMin === rawMax) {
+    // Degenerate range: expand by one unit so at least one grid line exists.
+    return { min: Math.floor(rawMin) - 1, max: Math.ceil(rawMax) + 1, step: 1 };
+  }
+  const range     = rawMax - rawMin;
+  const roughStep = range / maxIntervals;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+  const norm      = roughStep / magnitude;
+  const step = norm <= 1 ? magnitude
+             : norm <= 2 ? 2 * magnitude
+             : norm <= 5 ? 5 * magnitude
+             :             10 * magnitude;
+  return {
+    min:  Math.floor(rawMin / step) * step,
+    max:  Math.ceil(rawMax  / step) * step,
+    step,
+  };
+}
+
+/**
+ * Compute the union Y-axis range across all per-phase extremes, apply a nice
+ * scale to it, and push the same min/max/stepSize to every chart in the group
+ * so L1/L2/L3 remain visually comparable.
+ *
+ * The nice scale algorithm picks a step from {1, 2, 5, 10} × 10ⁿ that keeps
+ * the number of tick intervals ≤ 5, then rounds min/max outward to clean
+ * multiples of that step.  ticks.stepSize is written directly so Chart.js
+ * places grid lines at those positions regardless of maxTicksLimit.
+ *
  * @param {import('chart.js').Chart[]} charts
  * @param {{min:number, max:number}[]} perPhaseExtremes
- * @param {number} minPad    - Minimum absolute padding on each side.
  * @param {number} [minFloor=-Infinity] - Hard lower bound for the Y minimum
- *   (e.g. pass 0 for current charts to prevent the axis dipping below zero).
+ *   (pass 0 for current charts to prevent the axis going below zero).
  */
-function syncChartScales(charts, perPhaseExtremes, minPad, minFloor = -Infinity) {
+function syncChartScales(charts, perPhaseExtremes, minFloor = -Infinity) {
   let globalMin = Infinity, globalMax = -Infinity;
   perPhaseExtremes.forEach(e => {
     if (e.min < globalMin) globalMin = e.min;
     if (e.max > globalMax) globalMax = e.max;
   });
   if (!isFinite(globalMin) || !isFinite(globalMax)) return;
-  const pad = Math.max(minPad, (globalMax - globalMin) * 0.25);
+
+  // Clamp the raw lower bound before computing the nice scale so that the
+  // floor is reflected in the rounding, not just clamped after the fact.
+  const clampedMin = Math.max(minFloor, globalMin);
+  const { min, max, step } = niceScale(clampedMin, globalMax);
+  const niceMin = Math.max(minFloor, min);
+
   charts.forEach(c => {
-    c.options.scales.y.min = Math.max(minFloor, globalMin - pad);
-    c.options.scales.y.max = globalMax + pad;
+    c.options.scales.y.min  = niceMin;
+    c.options.scales.y.max  = max;
+    // Drive grid line positions via stepSize; maxTicksLimit is set high
+    // enough in makeInlineOpts not to prune these ticks.
+    c.options.scales.y.ticks.stepSize = step;
   });
 }
 
