@@ -43,7 +43,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Iterator, Optional
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, make_response, render_template, request
 
 from hegg.store import HeggStore, default_db_path
 
@@ -62,13 +62,13 @@ _store: Optional[HeggStore] = None
 # Routes
 # ---------------------------------------------------------------------------
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def index() -> str:
     """Render the main dashboard page."""
     return render_template("dashboard.html")
 
 
-@app.route("/api/latest")
+@app.route("/api/latest", methods=["GET"])
 def api_latest() -> Response:
     """Return the most recent 1-second reading as JSON, or 204 if none yet."""
     if _store is None:
@@ -79,7 +79,7 @@ def api_latest() -> Response:
     return jsonify(reading.to_dict())
 
 
-@app.route("/api/summary/latest")
+@app.route("/api/summary/latest", methods=["GET"])
 def api_summary_latest() -> Response:
     """Return the most recent minute-summary packet, or 204."""
     if _store is None:
@@ -90,7 +90,7 @@ def api_summary_latest() -> Response:
     return jsonify(summary)
 
 
-@app.route("/api/device")
+@app.route("/api/device", methods=["GET"])
 def api_device() -> Response:
     """Return device identity: IP from the store, serial/model from the latest summary.
 
@@ -108,7 +108,7 @@ def api_device() -> Response:
     return jsonify(info)
 
 
-@app.route("/api/events")
+@app.route("/api/events", methods=["GET"])
 def api_events() -> Response:
     """Return recent unknown/raw event packets, newest first (debug endpoint)."""
     if _store is None:
@@ -117,7 +117,7 @@ def api_events() -> Response:
     return jsonify(_store.query_events(limit=limit))
 
 
-@app.route("/api/summary/delta")
+@app.route("/api/summary/delta", methods=["GET"])
 def api_summary_delta() -> Response:
     """Return cumulative energy/gas deltas for a time window.
 
@@ -136,7 +136,7 @@ def api_summary_delta() -> Response:
     return jsonify(delta)
 
 
-@app.route("/api/history")
+@app.route("/api/history", methods=["GET"])
 def api_history() -> Response:
     """Return bucketed historical readings.
 
@@ -148,7 +148,7 @@ def api_history() -> Response:
         JSON array of averaged reading dicts, or 503 if the store is not ready.
     """
     if _store is None:
-        return jsonify({"error": "store not initialised"}), 503
+        return make_response(jsonify({"error": "store not initialised"}), 503)
 
     hours = max(1, min(int(request.args.get("hours", 24)), 168))
     auto_bucket = max(10, (hours * 3600) // 500)
@@ -158,7 +158,7 @@ def api_history() -> Response:
     return jsonify(_store.query(since, bucket_seconds=bucket))
 
 
-@app.route("/stream")
+@app.route("/stream", methods=["GET"])
 def stream() -> Response:
     """SSE endpoint — tails the SQLite store for new rows.
 

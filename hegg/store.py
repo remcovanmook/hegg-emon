@@ -23,15 +23,17 @@ background timer.
 """
 
 import json
+import os
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 from hegg.reading import HeggReading
 
-import os
+#: Fallback database filename used by default_db_path() and HeggStore.
+_DEFAULT_DB_NAME: str = "hegg.db"
 
 #: Number of days of raw readings to retain.
 RETENTION_DAYS: int = 7
@@ -60,15 +62,15 @@ def default_db_path() -> str:
     # 2. Production system path.
     system_dir = "/var/lib/hegg"
     if os.path.isdir(system_dir) and os.access(system_dir, os.W_OK):
-        return os.path.join(system_dir, "hegg.db")
+        return os.path.join(system_dir, _DEFAULT_DB_NAME)
 
     # 3. db/ subdirectory in the current working directory (dev layout).
     db_dir = os.path.join(os.getcwd(), "db")
     if os.path.isdir(db_dir):
-        return os.path.join(db_dir, "hegg.db")
+        return os.path.join(db_dir, _DEFAULT_DB_NAME)
 
     # 4. Flat file next to wherever we are running from.
-    return "hegg.db"
+    return _DEFAULT_DB_NAME
 
 
 _DDL = """
@@ -146,7 +148,7 @@ class HeggStore:
         path: Filesystem path to the SQLite database file.
     """
 
-    def __init__(self, path: Union[str, Path] = "hegg.db") -> None:
+    def __init__(self, path: Union[str, Path] = _DEFAULT_DB_NAME) -> None:
         self._path = str(path)
         self._local = threading.local()
         self._write_lock = threading.Lock()
