@@ -286,7 +286,7 @@ function recolorCharts() {
 
   Chart.defaults.color = tick;
 
-  [powerChart, ...voltageCharts, ...currentCharts].forEach(chart => {
+  [powerChart, ...voltageCharts, ...currentCharts, usageChart, costChart, gasChart].filter(Boolean).forEach(chart => {
     for (const axis of Object.values(chart.options.scales)) {
       if (axis.ticks) axis.ticks.color = tick;
       if (axis.grid)  axis.grid.color  = grid;
@@ -353,6 +353,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     selectedHours = Number.parseInt(el.historyRange.value, 10);
     loadHistory(selectedHours);
     loadSummaryDelta(selectedHours);
+    loadUsageCharts();
   });
 
   // Theme toggle: click cycles light → dark → auto.
@@ -804,8 +805,8 @@ async function loadUsageCharts() {
   let consumption, prices;
   try {
     const [rC, rP] = await Promise.all([
-      fetch("/api/summary/hourly?hours=24"),
-      fetch("/api/prices?hours=24"),
+      fetch(`/api/summary/hourly?hours=${selectedHours}`),
+      fetch(`/api/prices?hours=${selectedHours}`),
     ]);
     if (!rC.ok || rC.status === 204) return;
     consumption = await rC.json();
