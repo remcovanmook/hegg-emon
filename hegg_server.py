@@ -46,11 +46,12 @@ from hegg.store import default_db_path  # noqa: E402
 
 
 def _prometheus_poll_loop(store, exporter, interval: float = 2.0) -> None:
-    """Poll the store for the latest reading and update Prometheus gauges.
+    """Poll the store for the latest reading and summary, update Prometheus gauges.
 
     Runs in a daemon thread.  Uses a 2-second interval — the device broadcasts
     once per second, but Prometheus scrape intervals are typically 15-60 s so
-    there is no value in polling faster.
+    there is no value in polling faster.  The minute-summary arrives less
+    frequently, but is polled at the same rate for simplicity.
 
     Args:
         store:    :class:`~hegg.store.HeggStore` instance.
@@ -63,6 +64,7 @@ def _prometheus_poll_loop(store, exporter, interval: float = 2.0) -> None:
             reading = store.latest_reading()
             if reading is not None:
                 exporter.update(reading)
+            exporter.update_summary(store.latest_summary())
         except Exception:
             logger.exception("Prometheus poll error")
 
