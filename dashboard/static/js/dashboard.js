@@ -850,6 +850,10 @@ async function loadUsageCharts() {
     }
   }
 
+  // Re-apply x-axis config so x.min matches the selected window,
+  // identical to what the electricity charts do before each update.
+  applyXAxisConfig(selectedHours);
+
   if (usageChart) {
     usageChart.data.labels = usageLabels;
     usageChart.data.datasets[0].data = d1;
