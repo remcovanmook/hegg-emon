@@ -9,6 +9,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
+  <script>
+    /* Apply saved theme before first paint to prevent a flash of wrong theme. */
+    document.documentElement.dataset.theme =
+      localStorage.getItem("hegg-theme") || "light";
+  </script>
 </head>
 <body>
 
@@ -33,6 +38,7 @@
           <option value="168">7 d</option>
         </select>
         <span class="header-time" id="header-time" aria-live="off">—</span>
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle colour theme"></button>
         <div class="connection-status" id="connection-status" role="status" aria-live="polite">
           <span class="status-dot" id="status-dot"></span>
           <span class="status-label" id="status-label">Connecting…</span>

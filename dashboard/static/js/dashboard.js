@@ -21,14 +21,27 @@
 
 /* ── Palette ───────────────────────────────────────────────────────────── */
 
-const COLORS = {
-  delivered: "#3b82f6",
-  returned:  "#22c55e",
-  net:       "#f59e0b",
-  l1: "#818cf8",
-  l2: "#38bdf8",
-  l3: "#fb923c",
-};
+/**
+ * Return the current chart palette by reading computed CSS custom properties.
+ * Called at init and after every theme change so chart line colours track
+ * the active theme's accent values.
+ * @returns {{delivered:string, returned:string, net:string, l1:string, l2:string, l3:string}}
+ */
+function chartPalette() {
+  const s = getComputedStyle(document.documentElement);
+  const v = name => s.getPropertyValue(name).trim();
+  return {
+    delivered: v("--delivered-color"),
+    returned:  v("--returned-color"),
+    net:       v("--net-color"),
+    l1:        v("--phase-l1"),
+    l2:        v("--phase-l2"),
+    l3:        v("--phase-l3"),
+  };
+}
+
+/** Mutable palette reference used by chart init and recolor. */
+let COLORS = chartPalette();
 
 /**
  * X-axis tick configuration per history window.
@@ -168,7 +181,99 @@ let ema = null;
  */
 const flipAnnotations = {};
 
-/* ── DOM ────────────────────────────────────────────────────────────────── */
+/* ── Theme management ───────────────────────────────────────────────────────── */
+
+const THEME_CYCLE  = ["light", "dark", "auto"];
+const THEME_LABELS = { light: "☀️ Light", dark: "🌙 Dark", auto: "◐ Auto" };
+
+/**
+ * Return true when the currently active computed theme is dark.
+ * Handles explicit dark and auto-dark (OS preference).
+ * @returns {boolean}
+ */
+function isDarkTheme() {
+  const t = document.documentElement.dataset.theme;
+  if (t === "dark") return true;
+  if (t === "auto") return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return false;
+}
+
+/**
+ * Apply *theme* ('light' | 'dark' | 'auto'), persist to localStorage,
+ * and update the toggle button label.
+ * @param {string} theme
+ */
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("hegg-theme", theme);
+  const btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = THEME_LABELS[theme] ?? theme;
+  recolorCharts();
+}
+
+/** Advance to the next theme in the cycle. */
+function cycleTheme() {
+  const current = document.documentElement.dataset.theme || "light";
+  const next    = THEME_CYCLE[(THEME_CYCLE.indexOf(current) + 1) % THEME_CYCLE.length];
+  applyTheme(next);
+}
+
+/**
+ * Update Chart.js colour options to match the active theme.
+ * Reads CSS custom properties so the values are always in sync with CSS.
+ * Does nothing if charts are not yet initialised.
+ */
+function recolorCharts() {
+  if (!powerChart) return;
+  const s   = getComputedStyle(document.documentElement);
+  const v   = name => s.getPropertyValue(name).trim();
+  const grid    = v("--chart-grid");
+  const tick    = v("--text-muted");
+  const tipBg   = v("--chart-tooltip-bg");
+  const tipBdr  = v("--chart-tooltip-border");
+  const tipTtl  = v("--chart-tooltip-title");
+  const tipBdy  = v("--chart-tooltip-body");
+
+  // Refresh the mutable palette so newly-pushed data points use updated colours.
+  Object.assign(COLORS, chartPalette());
+
+  Chart.defaults.color = tick;
+
+  [powerChart, ...voltageCharts, ...currentCharts].forEach(chart => {
+    for (const axis of Object.values(chart.options.scales)) {
+      if (axis.ticks) axis.ticks.color = tick;
+      if (axis.grid)  axis.grid.color  = grid;
+    }
+    const tp = chart.options.plugins?.tooltip;
+    if (tp) {
+      tp.backgroundColor = tipBg;
+      tp.borderColor     = tipBdr;
+      tp.titleColor      = tipTtl;
+      tp.bodyColor       = tipBdy;
+    }
+    // Update dataset colours for the power chart segment colouring.
+    chart.data.datasets.forEach(ds => {
+      if (ds.label === "Net") {
+        ds.segment.borderColor     = ctx => ctx.p0.parsed.y >= 0 ? COLORS.delivered : COLORS.returned;
+        ds.segment.backgroundColor = ctx => ctx.p0.parsed.y >= 0
+          ? COLORS.delivered + "22" : COLORS.returned + "22";
+      } else if (ds.label === "V" || ds.label === "A") {
+        // Sparkline datasets keep their original colour — update via index.
+        const idx = voltageCharts.indexOf(chart) !== -1
+          ? voltageCharts.indexOf(chart)
+          : currentCharts.indexOf(chart);
+        if (idx >= 0) {
+          const c = [COLORS.l1, COLORS.l2, COLORS.l3][idx];
+          ds.borderColor     = c;
+          ds.backgroundColor = c + "22";
+        }
+      }
+    });
+    chart.update("none");
+  });
+}
+
+/* ── DOM ───────────────────────────────────────────────────────────── */
 
 let el;
 
@@ -191,6 +296,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   initCharts();
+  recolorCharts();           // seed chart colours from the active theme
   await loadHistory(selectedHours);
   await loadSummary();
   loadDevice();
@@ -200,6 +306,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     selectedHours = parseInt(el.historyRange.value, 10);
     loadHistory(selectedHours);
     loadSummaryDelta(selectedHours);
+  });
+
+  // Theme toggle: click cycles light → dark → auto.
+  const toggleBtn = document.getElementById("theme-toggle");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", cycleTheme);
+    // Set initial label from the theme already applied by the inline script.
+    const savedTheme = document.documentElement.dataset.theme || "light";
+    toggleBtn.textContent = THEME_LABELS[savedTheme] ?? savedTheme;
+  }
+
+  // Re-colour charts when OS preference changes while in auto mode.
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (document.documentElement.dataset.theme === "auto") recolorCharts();
   });
 
   // Minute-level refresh for absolute values; device info is static.
