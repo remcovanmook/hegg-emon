@@ -6,7 +6,16 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+
+# Database files — db/ directory is tracked, its contents are not
+db/*.db
+db/*.db-shm
+db/*.db-wal
+
+# Any stray database files at root
 *.db
 *.db-shm
 *.db-wal
+
+# Network capture files
 *.cap
