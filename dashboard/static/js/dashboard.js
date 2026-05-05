@@ -172,7 +172,7 @@ function initCharts() {
       ],
     },
     options: deepMerge(BASE_OPTS, {
-      scales: { y: { beginAtZero: true, title: { display: true, text: "kW", color: "#6b7490", font: { size: 11 } } } },
+      scales: { y: { beginAtZero: true, title: { display: true, text: "W", color: "#6b7490", font: { size: 11 } } } },
     }),
   });
 
@@ -266,9 +266,9 @@ async function loadHistory(hours) {
   flipCount = 0;
 
   // Power datasets.
-  powerChart.data.datasets[0].data = toXY(data, r => r.power_delivered);
-  powerChart.data.datasets[1].data = toXY(data, r => r.power_returned);
-  powerChart.data.datasets[2].data = toXY(data, r => r.power_delivered - r.power_returned);
+  powerChart.data.datasets[0].data = toXY(data, r => Math.round(r.power_delivered * 1000));
+  powerChart.data.datasets[1].data = toXY(data, r => Math.round(r.power_returned  * 1000));
+  powerChart.data.datasets[2].data = toXY(data, r => Math.round((r.power_delivered - r.power_returned) * 1000));
 
   // Voltage inline charts + per-phase extremes.
   const vFields = ["voltage_l1", "voltage_l2", "voltage_l3"];
@@ -392,8 +392,8 @@ function applyReading(r) {
   const delivered = r.power_delivered ?? 0;
   const returned  = r.power_returned  ?? 0;
 
-  setValue(el.powerDelivered, delivered.toFixed(3));
-  setValue(el.powerReturned,  returned.toFixed(3));
+  setValue(el.powerDelivered, Math.round(delivered * 1000));
+  setValue(el.powerReturned,  Math.round(returned  * 1000));
 
   maxPowerSeen = Math.max(maxPowerSeen, delivered, returned, 0.001);
   el.barDelivered.style.width = `${(delivered / maxPowerSeen) * 100}%`;
@@ -433,10 +433,10 @@ function setValue(elem, val) {
 function appendToCharts(r) {
   const ts = new Date(r.timestamp).getTime();
 
-  // Power + net.
-  powerChart.data.datasets[0].data.push({ x: ts, y: r.power_delivered });
-  powerChart.data.datasets[1].data.push({ x: ts, y: r.power_returned });
-  powerChart.data.datasets[2].data.push({ x: ts, y: r.power_delivered - r.power_returned });
+  // Power + net (stored in W).
+  powerChart.data.datasets[0].data.push({ x: ts, y: Math.round(r.power_delivered * 1000) });
+  powerChart.data.datasets[1].data.push({ x: ts, y: Math.round(r.power_returned  * 1000) });
+  powerChart.data.datasets[2].data.push({ x: ts, y: Math.round((r.power_delivered - r.power_returned) * 1000) });
 
   const exporting = r.power_returned > r.power_delivered;
   if (lastWasExporting !== null && exporting !== lastWasExporting) {
@@ -520,7 +520,13 @@ function updateVoltageAnnotation(phaseIndex) {
   const { min, max } = voltageExtremes[phaseIndex];
   if (!isFinite(min) || !isFinite(max)) return;
 
-  const chart = voltageCharts[phaseIndex];
+  // Add proportional padding so the line is never flush with the chart edge.
+  const range   = Math.max(max - min, 1);  // avoid zero-range
+  const pad     = Math.max(2, range * 0.25);
+  const chart   = voltageCharts[phaseIndex];
+  chart.options.scales.y.min = min - pad;
+  chart.options.scales.y.max = max + pad;
+
   chart.options.plugins.annotation.annotations = {
     vMin: {
       type: "line",
@@ -531,7 +537,7 @@ function updateVoltageAnnotation(phaseIndex) {
       borderDash: [4, 3],
       label: {
         display: true,
-        content: `${min} V`,
+        content: `${min.toFixed(1)} V`,
         position: "start",
         backgroundColor: "rgba(239,68,68,0.8)",
         color: "#fff",
@@ -548,7 +554,7 @@ function updateVoltageAnnotation(phaseIndex) {
       borderDash: [4, 3],
       label: {
         display: true,
-        content: `${max} V`,
+        content: `${max.toFixed(1)} V`,
         position: "start",
         backgroundColor: "rgba(59,130,246,0.8)",
         color: "#fff",

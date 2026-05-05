@@ -54,6 +54,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--mqtt-port",  type=int, default=int(os.getenv("HEGG_MQTT_PORT", "1883")))
     p.add_argument("--mqtt-user",  default=os.getenv("HEGG_MQTT_USER", ""))
     p.add_argument("--mqtt-pass",  default=os.getenv("HEGG_MQTT_PASS", ""))
+    p.add_argument("--device-ip",  default=os.getenv("HEGG_DEVICE_IP", ""),
+                   help="Lock to this source IP (default: auto-detect first seen)")
     p.add_argument("--debug",      action="store_true")
     return p.parse_args()
 
@@ -61,6 +63,7 @@ def parse_args() -> argparse.Namespace:
 def start_dashboard(
     http_port: int, udp_port: int, debug: bool,
     extra_handlers: list | None = None,
+    device_ip: str = "",
 ) -> None:
     """Start the Flask dashboard in the current thread (blocking).
 
@@ -68,13 +71,14 @@ def start_dashboard(
         http_port:      TCP port to serve the dashboard on.
         udp_port:       UDP port to receive Hegg broadcasts on.
         debug:          Enable Flask debug mode.
-        extra_handlers: Additional async handlers forwarded to the UDP listener
-                        (e.g. Prometheus exporter) so only one socket binds the port.
+        extra_handlers: Additional async handlers forwarded to the UDP listener.
+        device_ip:      Lock to this source IP; auto-detect if empty.
     """
     sys.path.insert(0, str(__file__).rsplit("/", 1)[0])
     from dashboard.app import create_app
     application = create_app(
-        udp_port=udp_port, extra_handlers=extra_handlers or []
+        udp_port=udp_port, extra_handlers=extra_handlers or [],
+        device_ip=device_ip or "",
     )
     logger.info("Dashboard listening on http://0.0.0.0:%d/", http_port)
     application.run(
@@ -148,7 +152,8 @@ def main() -> None:
     # Dashboard (+ optional Prometheus handler) runs in a daemon thread.
     dash_thread = threading.Thread(
         target=start_dashboard,
-        args=(args.http_port, args.udp_port, args.debug, extra_handlers),
+        args=(args.http_port, args.udp_port, args.debug,
+              extra_handlers, args.device_ip),
         daemon=True,
         name="hegg-dashboard",
     )

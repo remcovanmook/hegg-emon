@@ -59,6 +59,9 @@ _store: Optional[HeggStore] = None
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+#: Source port the Hegg device broadcasts from.
+_DEVICE_SOURCE_PORT: int = 16120
+
 #: Fields present in every standard 1-second reading packet.
 _KNOWN_FIELDS = {
     "timestamp", "serial",
@@ -87,23 +90,21 @@ def _push_reading(reading: HeggReading) -> None:
             logger.exception("Store insert failed")
 
 
-def _run_listener(port: int, extra_handlers: List[Callable]) -> None:
+def _run_listener(port: int, extra_handlers: List[Callable],
+                  device_ip: str = "") -> None:
     """Receive Hegg UDP broadcasts using a raw blocking socket.
 
-    Uses the same socket options as udp_test.py (SO_REUSEADDR, SO_BROADCAST,
-    SO_REUSEPORT) which are confirmed to work on this platform.  The asyncio
-    create_datagram_endpoint approach did not receive packets reliably on macOS.
-
-    Each unique device timestamp is processed once.  The Hegg device sends the
-    same reading 2-3 times per second; duplicates are dropped by comparing the
-    timestamp ms value against the previous stored value.
+    Filters by source port :data:`_DEVICE_SOURCE_PORT` (16120) to ignore
+    any other UDP traffic on the listen port.  Locks onto the source IP of
+    the first valid packet (or a pre-configured IP) to prevent processing
+    duplicates from other interfaces.
 
     Args:
-        port:           UDP port to bind to.
-        extra_handlers: Additional async callables (e.g. Prometheus exporter);
-                        run in a dedicated per-thread event loop.
+        port:           UDP destination port to bind to (16121).
+        extra_handlers: Additional async callables run for each reading.
+        device_ip:      Lock to this source IP immediately.  Auto-detects
+                        from first seen packet if empty.
     """
-    # Persistent event loop for running async extra handlers.
     handler_loop: Optional[asyncio.AbstractEventLoop] = None
     if extra_handlers:
         handler_loop = asyncio.new_event_loop()
@@ -114,12 +115,12 @@ def _run_listener(port: int, extra_handlers: List[Callable]) -> None:
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     except AttributeError:
-        pass  # SO_REUSEPORT not available on all platforms
+        pass
     sock.bind(("0.0.0.0", port))
-    sock.settimeout(1.0)  # allows clean shutdown on process exit
+    sock.settimeout(1.0)
     logger.info("UDP socket bound to 0.0.0.0:%d", port)
 
-    last_ts_ms: int = 0
+    locked_ip: str = device_ip
 
     try:
         while True:
@@ -127,6 +128,20 @@ def _run_listener(port: int, extra_handlers: List[Callable]) -> None:
                 data, addr = sock.recvfrom(4096)
             except socket.timeout:
                 continue
+
+            src_ip, src_port = addr
+
+            # Only accept packets from the device source port.
+            if src_port != _DEVICE_SOURCE_PORT:
+                continue
+
+            # Lock to the first seen device IP, or enforce the configured one.
+            if locked_ip:
+                if src_ip != locked_ip:
+                    continue
+            else:
+                locked_ip = src_ip
+                logger.info("Locked onto Hegg device at %s:%d", src_ip, src_port)
 
             try:
                 payload = json.loads(data.decode("utf-8"))
@@ -149,19 +164,13 @@ def _run_listener(port: int, extra_handlers: List[Callable]) -> None:
                 reading = HeggReading.from_dict(payload)
             except (KeyError, ValueError) as exc:
                 # Unknown packet structure — store raw for inspection.
-                logger.info("Unknown packet from %s: fields=%s", addr, sorted(payload.keys()))
+                logger.info("Unknown packet from %s: fields=%s", src_ip, sorted(payload.keys()))
                 if _store is not None:
                     try:
                         _store.insert_event(payload)
                     except Exception:
                         pass
                 continue
-
-            # The device sends 2-3 identical packets per second; deduplicate.
-            ts_ms = int(reading.timestamp.timestamp() * 1000)
-            if ts_ms == last_ts_ms:
-                continue
-            last_ts_ms = ts_ms
 
             _push_reading(reading)
 
@@ -308,6 +317,7 @@ def create_app(
     udp_port: int = 16121,
     db_path: str = "hegg.db",
     extra_handlers: Optional[List] = None,
+    device_ip: str = "",
 ) -> Flask:
     """Start background threads and return the configured Flask app.
 
@@ -316,6 +326,8 @@ def create_app(
         db_path:        Path to the SQLite database file.
         extra_handlers: Additional async handler callables registered with
                         the UDP listener (e.g. Prometheus exporter handle).
+        device_ip:      Lock the listener to this source IP immediately;
+                        auto-detects from first packet if empty.
 
     Returns:
         Configured :class:`flask.Flask` instance.
@@ -325,7 +337,7 @@ def create_app(
 
     threading.Thread(
         target=_run_listener,
-        args=(udp_port, extra_handlers or []),
+        args=(udp_port, extra_handlers or [], device_ip),
         daemon=True,
         name="hegg-udp",
     ).start()
