@@ -30,6 +30,20 @@ const COLORS = {
   l3: "#fb923c",
 };
 
+/**
+ * X-axis tick configuration per history window.
+ * unit + stepSize are passed directly to Chart.js time scale.
+ * Chart.js aligns generated ticks to clean multiples of stepSize.
+ * @type {Object.<number, {unit: string, stepSize: number}>}
+ */
+const AXIS_CONFIG = {
+    1:   { unit: "minute", stepSize: 5  },
+    6:   { unit: "minute", stepSize: 30 },
+    24:  { unit: "hour",   stepSize: 2  },
+    72:  { unit: "hour",   stepSize: 12 },
+    168: { unit: "day",    stepSize: 1  },
+};
+
 /* ── Shared Chart.js config ─────────────────────────────────────────────── */
 
 /** Base options shared by the full-width power and current charts. */
@@ -331,6 +345,8 @@ async function loadHistory(hours) {
   syncChartScales(voltageCharts, voltageExtremes, 2);
   syncChartScales(currentCharts, currentExtremes, 0.5);
 
+  applyXAxisConfig(hours);
+
   powerChart.update();
   voltageCharts.forEach(c => c.update());
   currentCharts.forEach(c => c.update());
@@ -584,6 +600,26 @@ function trimOldPoints(chart, cutoff) {
 }
 
 /* ── Scale helpers ──────────────────────────────────────────────────────── */
+
+/**
+ * Apply the appropriate X-axis tick unit and step for the given history
+ * window so ticks fall on clean boundaries regardless of zoom level.
+ *
+ * All charts share the same time scale configuration even though only the
+ * power chart displays its X axis.
+ *
+ * @param {number} hours - The currently selected history window.
+ */
+function applyXAxisConfig(hours) {
+  const cfg = AXIS_CONFIG[hours] ?? AXIS_CONFIG[24];
+  [powerChart, ...voltageCharts, ...currentCharts].forEach(chart => {
+    const x = chart.options.scales.x;
+    x.time.unit     = cfg.unit;
+    x.time.stepSize = cfg.stepSize;
+    // Let Chart.js place as many ticks as the stepSize warrants.
+    x.ticks.maxTicksLimit = 20;
+  });
+}
 
 /**
  * Compute the union Y-axis range across all per-phase extremes and apply the
