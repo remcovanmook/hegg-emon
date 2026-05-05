@@ -657,14 +657,12 @@ function stepUnitMs(unit) {
 
 /**
  * Apply the appropriate X-axis tick unit and step for the given history
- * window so ticks fall on clean clock boundaries.
+ * window so ticks — and therefore grid lines — fall on clean clock boundaries.
  *
- * Sets x.min to the largest clean multiple of stepSize that is ≤
- * (now − window), which forces Chart.js to anchor the first tick there
- * rather than at the first data point.
- *
- * All charts share the same configuration even though only the power chart
- * displays its X axis; the inline sparklines inherit the same time window.
+ * Chart.js time scale generates intermediate minor ticks in addition to the
+ * labelled major ticks; both produce grid lines.  afterBuildTicks strips the
+ * tick array down to only those whose value is an exact multiple of stepMs,
+ * guaranteeing grid lines land on :00, :05, :10 etc. for the 1 h range.
  *
  * @param {number} hours - The currently selected history window.
  */
@@ -678,7 +676,12 @@ function applyXAxisConfig(hours) {
     x.time.unit     = cfg.unit;
     x.time.stepSize = cfg.stepSize;
     x.min           = flooredMin;
-    x.ticks.maxTicksLimit = 20;
+    if (x.ticks) x.ticks.maxTicksLimit = 100;
+    // Strip any tick not at an exact step boundary — this controls grid lines,
+    // not just labels.
+    x.afterBuildTicks = scale => {
+      scale.ticks = scale.ticks.filter(t => t.value % stepMs === 0);
+    };
   });
 }
 
