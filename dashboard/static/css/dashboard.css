@@ -990,12 +990,20 @@ html, body {
   padding: 4px 0 4px 8px;
 }
 
-/** Mini polar canvas container: fills the td width, stays square. */
+/** Mini polar canvas container: fixed 120×120 px square. */
 .wye-neutral-mini-wrap {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  min-width: 120px;
-  max-width: 160px;
+  width: 120px;
+  height: 120px;
+}
+
+/**
+ * Absorber row td: gives the empty 4th row enough height so the 3 data rows
+ * stay at their natural height when the canvas rowspan covers all four.
+ * Tune if row font-size changes: value ≈ canvas_height − (3 × row_height).
+ */
+.wt-absorber {
+  height: 50px;
+  padding: 0;
 }
 
 #wye-neutral-canvas {
