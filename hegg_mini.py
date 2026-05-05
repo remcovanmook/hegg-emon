@@ -186,7 +186,7 @@ def _handle_packet(payload: dict, src_ip: str) -> None:
     global _latest_reading, _latest_summary, _device_ip
 
     if "energy_delivered_tariff1" in payload:
-        _latest_summary = payload
+        _latest_summary = _normalise_summary(payload)
         _device_ip = src_ip
         logger.debug("Summary packet received from %s", src_ip)
     else:
@@ -359,7 +359,7 @@ class MiniHandler(BaseHTTPRequestHandler):
         # ── API: latest summary ────────────────────────────────────────────
         elif path == "/api/summary/latest":
             if _latest_summary:
-                _json_response(self, _normalise_summary(_latest_summary))
+                _json_response(self, _latest_summary)
             else:
                 _no_content(self)
 
