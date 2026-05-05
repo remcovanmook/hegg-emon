@@ -247,60 +247,51 @@ html, body {
 
 /* ── Summary table ── */
 
-/** One table per summary box; browser table layout gives free column alignment. */
 .summary-table {
   border-collapse: collapse;
-  width: 100%;
 }
 
 .summary-table td {
-  padding: 2px 4px 2px 0;
+  padding: 1px 5px 1px 0;
   vertical-align: baseline;
   white-space: nowrap;
 }
 
-/** Label column: T1, T2, IP, etc. */
 .st-label {
   font-size: 0.60rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
-  padding-right: 6px;
+  padding-right: 4px;
 }
 
-/** Value column: the number. Right-aligned so digits stack. */
 .st-val {
   font-family: "JetBrains Mono", monospace;
-  font-size: 1.0rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--text);
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-/** Sub-row value: T1/T2 detail rows, slightly smaller and muted. */
 .st-val--sub {
   font-size: 0.78rem;
   color: var(--text-muted);
 }
 
-/** Unit column: kWh, m³, etc. */
 .st-unit {
   font-size: 0.60rem;
   color: var(--text-dim);
-  padding-left: 2px;
-  padding-right: 8px;
+  padding-right: 6px;
 }
 
-/** Delta column: the change over the selected period. */
 .st-delta {
   font-family: "JetBrains Mono", monospace;
   font-size: 0.65rem;
   color: var(--text-dim);
 }
 
-/** JS sets these classes on the <span> inside .st-delta. */
 .energy-delta--pos { color: var(--delivered-color); }
 .energy-delta--neg { color: var(--returned-color); }
 
