@@ -102,23 +102,31 @@ const BASE_OPTS = {
 
 /**
  * Build Chart.js options for an inline sparkline.
- * Y axis is displayed on the right with 3 ticks; X axis is hidden.
- * @param {function} [tickFmt] - Optional tick formatter.
+ * Y axis is displayed on the left with 3 ticks; X axis gridlines are shown
+ * but labels are hidden.  Tooltip matches the power chart style.
+ * @param {function} [tickFmt] - Optional Y-tick formatter.
+ * @param {string}   [unit=''] - Unit string appended to tooltip values (e.g. 'V', 'A').
  * @returns {object}
  */
-function makeInlineOpts(tickFmt) {
-  // Read the current grid colour from the CSS custom property so the initial
-  // paint is correct in both light and dark themes without waiting for
-  // recolorCharts() to run.
-  const gridColor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--chart-grid").trim() || "rgba(0,0,0,0.06)";
+function makeInlineOpts(tickFmt, unit = "") {
+  // Read current CSS custom properties so the initial paint is correct in
+  // both light and dark themes without waiting for recolorCharts() to run.
+  const s         = getComputedStyle(document.documentElement);
+  const cprop     = name => s.getPropertyValue(name).trim();
+  const gridColor = cprop("--chart-grid")     || "rgba(0,0,0,0.06)";
+  const tipBg     = cprop("--chart-tooltip-bg")     || "rgba(255,255,255,0.97)";
+  const tipBdr    = cprop("--chart-tooltip-border") || "rgba(0,0,0,0.10)";
+  const tipTtl    = cprop("--chart-tooltip-title")  || "#1a1d2e";
+  const tipBdy    = cprop("--chart-tooltip-body")   || "#6b7490";
 
   return {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
+    // index mode so the crosshair snaps to the nearest X position.
+    interaction: { mode: "index", intersect: false },
     elements: {
-      point: { radius: 0 },
+      point: { radius: 0, hitRadius: 6 },
       line:  { tension: 0.3, borderWidth: 1.5 },
     },
     scales: {
@@ -127,7 +135,11 @@ function makeInlineOpts(tickFmt) {
         // Labels and the border line are hidden — only the grid is visible.
         display: true,
         type: "time",
-        ticks: { display: false, maxTicksLimit: 100 },
+        time: {
+          tooltipFormat: "HH:mm:ss",
+          displayFormats: { second: "HH:mm:ss", minute: "HH:mm", hour: "HH:mm", day: "MMM d" },
+        },
+        ticks:  { display: false, maxTicksLimit: 100 },
         grid:   { color: gridColor },
         border: { display: false },
       },
@@ -146,7 +158,28 @@ function makeInlineOpts(tickFmt) {
     },
     plugins: {
       legend:  { display: false },
-      tooltip: { enabled: false },
+      tooltip: {
+        backgroundColor: tipBg,
+        borderColor:     tipBdr,
+        borderWidth:     1,
+        titleColor:      tipTtl,
+        bodyColor:       tipBdy,
+        padding:         10,
+        callbacks: {
+          /**
+           * Format the tooltip body line.
+           * Appends the unit string to the numeric value.
+           * @param {import('chart.js').TooltipItem} item
+           * @returns {string}
+           */
+          label(item) {
+            const v = item.parsed.y;
+            if (v == null) return "";
+            const fmt = tickFmt ? tickFmt(v) : v.toString();
+            return unit ? `${fmt} ${unit}` : fmt;
+          },
+        },
+      },
       annotation: { annotations: {} },
     },
   };
@@ -396,7 +429,7 @@ function initCharts() {
     voltageCharts.push(new Chart(document.getElementById(id), {
       type: "line",
       data: { datasets: [makeDataset("V", [COLORS.l1, COLORS.l2, COLORS.l3][i])] },
-      options: makeInlineOpts(v => v.toFixed(0)),
+      options: makeInlineOpts(v => v.toFixed(0), "V"),
     }));
   });
 
@@ -408,7 +441,7 @@ function initCharts() {
     currentCharts.push(new Chart(document.getElementById(id), {
       type: "line",
       data: { datasets: [makeDataset("A", [COLORS.l1, COLORS.l2, COLORS.l3][i])] },
-      options: makeInlineOpts(v => v.toFixed(1)),
+      options: makeInlineOpts(v => v.toFixed(1), "A"),
     }));
   });
 }
