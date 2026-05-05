@@ -905,8 +905,7 @@ async function loadUsageCharts() {
   // Gas totals.
   const totalGas = gas.reduce((a, b) => a + b, 0);
   setText("gas-total-val", totalGas.toFixed(3));
-  const gasDeltaPeriod = document.getElementById("gas-delta-period");
-  if (gasDeltaPeriod) gasDeltaPeriod.textContent = `${totalGas.toFixed(3)} m³ / ${_label}`;
+
 }
 
 /* ── SSE ────────────────────────────────────────────────────────────────── */
