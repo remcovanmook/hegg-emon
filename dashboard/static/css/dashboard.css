@@ -245,9 +245,51 @@ html, body {
   letter-spacing: 0.04em;
 }
 
-/* ── Energy row layout (used in summary strip cells) ── */
+/* ── Energy row layout ── */
 
-/** Header bar at the top of each summary box. */
+/**
+ * Energy items use a 5-column CSS grid shared across all rows via
+ * display:contents, giving aligned columns without fixed widths.
+ * Columns: label | value | unit | sep | delta
+ */
+.summary-item--energy {
+  display: grid;
+  grid-template-columns: 1.6rem auto auto 0.5rem 1fr;
+  column-gap: 6px;
+  row-gap: 3px;
+  align-items: baseline;
+}
+
+.summary-item--energy .summary-item-header {
+  grid-column: 1 / -1;
+  /* header styles (border, font) already applied by .summary-item-header */
+}
+
+/** Make each energy-row transparent to the grid; its spans become
+ *  direct grid items of .summary-item--energy. */
+.summary-item--energy .energy-row {
+  display: contents;
+}
+
+/**
+ * Device item: 2-column grid (label | value) across all sub-rows.
+ */
+.summary-item--device {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr;
+  column-gap: 6px;
+  row-gap: 3px;
+  align-items: baseline;
+}
+
+.summary-item--device .summary-item-header {
+  grid-column: 1 / -1;
+}
+
+.summary-item--device .energy-row {
+  display: contents;
+}
+
 .summary-item-header {
   font-size: 0.62rem;
   font-weight: 700;
@@ -279,8 +321,11 @@ html, body {
   padding: 2px 0;
 }
 
+/** Sub-rows: label is indented relative to main row via the empty
+ *  label span in the main row. Both main and sub rows are
+ *  display:contents within the parent grid, so padding is irrelevant. */
 .energy-row--sub {
-  padding-left: 10px;
+  /* no padding-left needed; alignment is handled by the grid */
 }
 
 .energy-label {
@@ -299,6 +344,8 @@ html, body {
   font-weight: 700;
   color: var(--text);
   white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .energy-row--sub .energy-val {
