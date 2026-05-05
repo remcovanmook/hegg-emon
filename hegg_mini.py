@@ -84,8 +84,11 @@ _TEMPLATE     = os.path.join(_STATIC_ROOT, "dashboard.html")
 #: Most recent 1-second reading dict, forwarded verbatim to SSE clients.
 _latest_reading: dict | None = None
 
-#: Most recent minute-summary packet, served on /api/summary/latest.
+#: Most recent minute-summary packet (raw from device), stored by _handle_packet.
 _latest_summary: dict = {}
+
+#: Source IP of the Hegg device, recorded on first valid packet.
+_device_ip: str = ""
 
 #: Per-client SSE queues.  One Queue per open /stream connection.
 _sse_clients: list[queue.Queue] = []
@@ -139,6 +142,35 @@ def _broadcast_reading(reading: dict) -> None:
                 pass  # slow client; handler will time out and clean up
 
 
+def _normalise_summary(raw: dict) -> dict:
+    """Remap raw UDP summary packet field names to match the store's output.
+
+    The Hegg device uses ``energy_delivered_tariff1`` / ``energy_returned_tariff1``
+    etc. in its wire format.  The Flask store transforms these to the shorter
+    ``energy_delivered_t1`` / ``energy_returned_t1`` forms, which is what the
+    dashboard JS reads.  This function performs the same mapping so the mini
+    server can serve the same API shape without a database.
+
+    Args:
+        raw: Decoded JSON dict from the device UDP broadcast.
+
+    Returns:
+        Dict with keys matching the Flask store's ``latest_summary()`` output.
+    """
+    return {
+        "serial":              raw.get("serial"),
+        "sw_version":          raw.get("sw_version"),
+        "equipment_id":        raw.get("equipment_id"),
+        "model":               raw.get("model"),
+        "wifi_rssi":           raw.get("wifi_rssi"),
+        "energy_delivered_t1": raw.get("energy_delivered_tariff1"),
+        "energy_delivered_t2": raw.get("energy_delivered_tariff2"),
+        "energy_returned_t1":  raw.get("energy_returned_tariff1"),
+        "energy_returned_t2":  raw.get("energy_returned_tariff2"),
+        "gas_delivered":       raw.get("gas_delivered"),
+    }
+
+
 def _handle_packet(payload: dict, src_ip: str) -> None:
     """Route a decoded UDP packet to the appropriate shared-state slot.
 
@@ -151,10 +183,11 @@ def _handle_packet(payload: dict, src_ip: str) -> None:
         payload: Decoded JSON dict from the device.
         src_ip:  Source IP address (used only for debug logging).
     """
-    global _latest_reading, _latest_summary
+    global _latest_reading, _latest_summary, _device_ip
 
     if "energy_delivered_tariff1" in payload:
         _latest_summary = payload
+        _device_ip = src_ip
         logger.debug("Summary packet received from %s", src_ip)
     else:
         _latest_reading = payload
@@ -326,7 +359,7 @@ class MiniHandler(BaseHTTPRequestHandler):
         # ── API: latest summary ────────────────────────────────────────────
         elif path == "/api/summary/latest":
             if _latest_summary:
-                _json_response(self, _latest_summary)
+                _json_response(self, _normalise_summary(_latest_summary))
             else:
                 _no_content(self)
 
@@ -341,7 +374,7 @@ class MiniHandler(BaseHTTPRequestHandler):
         # ── API: device identity ───────────────────────────────────────────
         elif path == "/api/device":
             info = {
-                "ip":        _latest_summary.get("ip"),
+                "ip":        _device_ip or None,
                 "serial":    _latest_summary.get("serial"),
                 "model":     _latest_summary.get("model"),
                 "sw":        _latest_summary.get("sw_version"),
