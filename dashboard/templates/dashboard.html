@@ -49,50 +49,38 @@
       <div class="summary-strip">
 
         <!-- Energy In -->
-        <div class="summary-item summary-item--energy">
+        <div class="summary-item">
           <div class="summary-item-header">Energy In</div>
           <table class="summary-table">
             <tr>
-              <td class="st-label"></td>
-              <td class="st-val" id="energy-in-total">—</td>
-              <td class="st-unit">kWh</td>
+              <td class="st-energy"><span id="energy-in-total">—</span> kWh</td>
               <td class="st-delta"><span id="energy-in-total-delta"></span></td>
             </tr>
             <tr>
-              <td class="st-label">T1</td>
-              <td class="st-val st-val--sub" id="energy-in-t1">—</td>
-              <td class="st-unit">kWh</td>
+              <td class="st-energy st-energy--sub">T1 <span id="energy-in-t1">—</span> kWh</td>
               <td class="st-delta"><span id="energy-in-t1-delta"></span></td>
             </tr>
             <tr>
-              <td class="st-label">T2</td>
-              <td class="st-val st-val--sub" id="energy-in-t2">—</td>
-              <td class="st-unit">kWh</td>
+              <td class="st-energy st-energy--sub">T2 <span id="energy-in-t2">—</span> kWh</td>
               <td class="st-delta"><span id="energy-in-t2-delta"></span></td>
             </tr>
           </table>
         </div>
 
         <!-- Energy Out -->
-        <div class="summary-item summary-item--energy">
+        <div class="summary-item">
           <div class="summary-item-header">Energy Out</div>
           <table class="summary-table">
             <tr>
-              <td class="st-label"></td>
-              <td class="st-val" id="energy-out-total">—</td>
-              <td class="st-unit">kWh</td>
+              <td class="st-energy"><span id="energy-out-total">—</span> kWh</td>
               <td class="st-delta"><span id="energy-out-total-delta"></span></td>
             </tr>
             <tr>
-              <td class="st-label">T1</td>
-              <td class="st-val st-val--sub" id="energy-out-t1">—</td>
-              <td class="st-unit">kWh</td>
+              <td class="st-energy st-energy--sub">T1 <span id="energy-out-t1">—</span> kWh</td>
               <td class="st-delta"><span id="energy-out-t1-delta"></span></td>
             </tr>
             <tr>
-              <td class="st-label">T2</td>
-              <td class="st-val st-val--sub" id="energy-out-t2">—</td>
-              <td class="st-unit">kWh</td>
+              <td class="st-energy st-energy--sub">T2 <span id="energy-out-t2">—</span> kWh</td>
               <td class="st-delta"><span id="energy-out-t2-delta"></span></td>
             </tr>
           </table>
@@ -103,35 +91,20 @@
           <div class="summary-item-header">Gas</div>
           <table class="summary-table">
             <tr>
-              <td class="st-val" id="gas-delivered">—</td>
-              <td class="st-unit">m³</td>
+              <td class="st-energy"><span id="gas-delivered">—</span> m³</td>
               <td class="st-delta"><span id="gas-delta"></span></td>
             </tr>
           </table>
         </div>
 
         <!-- Device -->
-        <div class="summary-item summary-item--device">
-          <div class="summary-item-header">
-            Device <span class="header-device-model" id="device-model"></span>
-          </div>
+        <div class="summary-item">
+          <div class="summary-item-header">Device <span class="header-device-model" id="device-model"></span></div>
           <table class="summary-table">
-            <tr>
-              <td class="st-label">IP</td>
-              <td class="st-val st-val--sub" id="device-ip">—</td>
-            </tr>
-            <tr>
-              <td class="st-label">ID</td>
-              <td class="st-val st-val--sub" id="device-serial">—</td>
-            </tr>
-            <tr>
-              <td class="st-label">WiFi</td>
-              <td class="st-val st-val--sub" id="device-rssi">—</td>
-            </tr>
-            <tr>
-              <td class="st-label">SW</td>
-              <td class="st-val st-val--sub" id="device-sw">—</td>
-            </tr>
+            <tr><td class="st-label">IP</td><td class="st-energy st-energy--sub" id="device-ip">—</td></tr>
+            <tr><td class="st-label">ID</td><td class="st-energy st-energy--sub" id="device-serial">—</td></tr>
+            <tr><td class="st-label">WiFi</td><td class="st-energy st-energy--sub" id="device-rssi">—</td></tr>
+            <tr><td class="st-label">SW</td><td class="st-energy st-energy--sub" id="device-sw">—</td></tr>
           </table>
         </div>
 
@@ -151,7 +124,7 @@
       </div>
     </section>
 
-    <!-- ── Voltage (inline charts per phase) ── -->
+    <!-- ── Voltage ── -->
     <section class="section" aria-labelledby="voltage-heading">
       <h2 id="voltage-heading" class="section-title">Voltage</h2>
       <div class="cards-row cards-row--three">
@@ -194,7 +167,7 @@
       </div>
     </section>
 
-    <!-- ── Current (inline charts per phase) ── -->
+    <!-- ── Current ── -->
     <section class="section" aria-labelledby="current-heading">
       <h2 id="current-heading" class="section-title">Current</h2>
       <div class="cards-row cards-row--three">

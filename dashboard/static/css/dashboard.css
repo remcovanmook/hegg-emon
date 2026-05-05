@@ -245,14 +245,14 @@ html, body {
   letter-spacing: 0.04em;
 }
 
-/* ── Summary table ── */
+/* ── Summary table (2 columns: energy | delta) ── */
 
 .summary-table {
   border-collapse: collapse;
 }
 
 .summary-table td {
-  padding: 1px 5px 1px 0;
+  padding: 1px 6px 1px 0;
   vertical-align: baseline;
   white-space: nowrap;
 }
@@ -263,33 +263,30 @@ html, body {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
-  padding-right: 4px;
+  padding-right: 6px;
 }
 
-.st-val {
+/** Main energy cell: large bold value with unit as inline text. */
+.st-energy {
   font-family: "JetBrains Mono", monospace;
   font-size: 1.05rem;
   font-weight: 700;
   color: var(--text);
-  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.st-val--sub {
+/** T1/T2 and device detail rows: smaller and muted. */
+.st-energy--sub {
   font-size: 0.78rem;
   color: var(--text-muted);
-}
-
-.st-unit {
-  font-size: 0.60rem;
-  color: var(--text-dim);
-  padding-right: 6px;
+  font-weight: 500;
 }
 
 .st-delta {
   font-family: "JetBrains Mono", monospace;
   font-size: 0.65rem;
   color: var(--text-dim);
+  padding-left: 8px;
 }
 
 .energy-delta--pos { color: var(--delivered-color); }
