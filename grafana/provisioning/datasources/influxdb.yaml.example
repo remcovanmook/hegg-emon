@@ -1,0 +1,29 @@
+# grafana/provisioning/datasources/influxdb.yaml
+#
+# InfluxDB v2 datasource for Hegg energy data.
+# Edit the fields marked CHANGE_ME to match your InfluxDB instance.
+# Drop this file (without the .example suffix) into:
+#   provisioning/datasources/influxdb.yaml
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/
+
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB — Hegg
+    uid: hegg-influxdb          # referenced by the dashboard JSON
+    type: influxdb
+    access: proxy
+    isDefault: true
+
+    url: http://localhost:8086  # CHANGE_ME: InfluxDB URL
+
+    jsonData:
+      version: Flux             # use Flux query language (InfluxDB v2)
+      organization: myorg       # CHANGE_ME: InfluxDB v2 organisation
+      defaultBucket: hegg       # CHANGE_ME: default bucket
+
+    secureJsonData:
+      token: my-influxdb-token  # CHANGE_ME: InfluxDB v2 API token
+
+    editable: true

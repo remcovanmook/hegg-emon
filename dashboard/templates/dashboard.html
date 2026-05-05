@@ -9,6 +9,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
+  <script>
+    /* Apply saved theme before first paint to prevent a flash of wrong theme. */
+    document.documentElement.dataset.theme =
+      localStorage.getItem("hegg-theme") || "light";
+  </script>
 </head>
 <body>
 
@@ -33,6 +38,7 @@
           <option value="168">7 d</option>
         </select>
         <span class="header-time" id="header-time" aria-live="off">—</span>
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle colour theme"></button>
         <div class="connection-status" id="connection-status" role="status" aria-live="polite">
           <span class="status-dot" id="status-dot"></span>
           <span class="status-label" id="status-label">Connecting…</span>
@@ -116,9 +122,15 @@
       <h2 id="power-heading" class="section-title">Power</h2>
       <div class="chart-card" id="power-display">
         <div class="power-card-header">
-          <span class="power-direction" id="power-direction">—</span>
-          <span class="power-value mono" id="power-net-val">—</span>
-          <span class="power-unit">W</span>
+          <div class="power-card-headline">
+            <span class="power-direction" id="power-direction">—</span>
+            <span class="power-value mono" id="power-net-val">—</span>
+            <span class="power-unit">W</span>
+          </div>
+          <div class="power-card-deltas">
+            <span class="power-delta-in" id="power-delta-in"></span>
+            <span class="power-delta-out" id="power-delta-out"></span>
+          </div>
         </div>
         <div class="chart-wrapper"><canvas id="chart-power" aria-label="Net power history"></canvas></div>
       </div>
@@ -214,6 +226,7 @@
 
   <footer class="footer"></footer>
 
+  <div id="flip-tooltip" class="flip-tooltip" role="tooltip"></div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>

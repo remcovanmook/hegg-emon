@@ -59,3 +59,31 @@ class TestHeggExporter:
         exporter.update(reading)
         ts = registry.get_sample_value("hegg_last_seen_timestamp")
         assert abs(ts - reading.timestamp.timestamp()) < 1
+
+    def test_update_summary_energy_and_gas(self, exporter, registry):
+        """update_summary() sets cumulative energy and gas gauges."""
+        summary = {
+            "energy_delivered_t1": 1234.5,
+            "energy_delivered_t2": 678.9,
+            "energy_returned_t1": 100.1,
+            "energy_returned_t2": 200.2,
+            "gas_delivered": 987.6,
+            "wifi_rssi": -55,
+        }
+        exporter.update_summary(summary)
+        assert registry.get_sample_value("hegg_energy_delivered_kwh", {"tariff": "t1"}) == 1234.5
+        assert registry.get_sample_value("hegg_energy_delivered_kwh", {"tariff": "t2"}) == 678.9
+        assert registry.get_sample_value("hegg_energy_returned_kwh",  {"tariff": "t1"}) == 100.1
+        assert registry.get_sample_value("hegg_energy_returned_kwh",  {"tariff": "t2"}) == 200.2
+        assert registry.get_sample_value("hegg_gas_delivered_m3") == 987.6
+        assert registry.get_sample_value("hegg_wifi_rssi_dbm") == -55
+
+    def test_update_summary_empty_is_noop(self, exporter, registry):
+        """update_summary({}) must not raise."""
+        exporter.update_summary({})  # should not raise
+
+    def test_update_summary_none_fields_skipped(self, exporter, registry):
+        """Fields present but None must not raise and must not overwrite prior values."""
+        exporter.update_summary({"gas_delivered": 42.0})
+        exporter.update_summary({"gas_delivered": None})
+        assert registry.get_sample_value("hegg_gas_delivered_m3") == 42.0

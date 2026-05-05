@@ -2,8 +2,51 @@
    Hegg Energy Dashboard — design system & layout
    ============================================================ */
 
-/* ── Custom properties (design tokens) ── */
+/* ── Custom properties — light theme (default) ── */
 :root {
+  --bg:          #f3f5fa;
+  --surface:     #ffffff;
+  --surface-2:   #edf0f7;
+  --border:      rgba(0, 0, 0, 0.08);
+
+  --text:        #1a1d2e;
+  --text-muted:  #6b7490;
+  --text-dim:    #c8cedf;
+
+  --accent-blue:   #2563eb;
+  --accent-green:  #16a34a;
+  --accent-amber:  #d97706;
+  --accent-red:    #dc2626;
+  --accent-purple: #9333ea;
+
+  --delivered-color: #2563eb;
+  --returned-color:  #16a34a;
+  --net-color:       #d97706;
+
+  --phase-l1: #6366f1;
+  --phase-l2: #0ea5e9;
+  --phase-l3: #f97316;
+
+  --radius:   14px;
+  --radius-sm: 8px;
+  --shadow:        0 4px 24px rgba(0, 0, 0, 0.08);
+  --shadow-hover:  0 8px 32px rgba(0, 0, 0, 0.13);
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+  --header-bg-glass:      rgba(243, 245, 250, 0.88);
+  --chart-grid:           rgba(0, 0, 0, 0.06);
+  --chart-tooltip-bg:     rgba(255, 255, 255, 0.97);
+  --chart-tooltip-border: rgba(0, 0, 0, 0.10);
+  --chart-tooltip-title:  #1a1d2e;
+  --chart-tooltip-body:   #6b7490;
+
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 16px;
+  color-scheme: light;
+}
+
+/* ── Dark theme ── */
+[data-theme="dark"] {
   --bg:          #0d0f14;
   --surface:     #161a22;
   --surface-2:   #1e2330;
@@ -27,14 +70,50 @@
   --phase-l2: #38bdf8;
   --phase-l3: #fb923c;
 
-  --radius:   14px;
-  --radius-sm: 8px;
-  --shadow:   0 4px 24px rgba(0, 0, 0, 0.4);
-  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow:        0 4px 24px rgba(0, 0, 0, 0.40);
+  --shadow-hover:  0 8px 32px rgba(0, 0, 0, 0.50);
 
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 16px;
+  --header-bg-glass:      rgba(13, 15, 20, 0.85);
+  --chart-grid:           rgba(255, 255, 255, 0.04);
+  --chart-tooltip-bg:     rgba(22, 26, 34, 0.95);
+  --chart-tooltip-border: rgba(255, 255, 255, 0.10);
+  --chart-tooltip-title:  #e8eaf0;
+  --chart-tooltip-body:   #9ca3af;
+
   color-scheme: dark;
+}
+
+/* ── Auto theme: follow OS preference ── */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --bg:          #0d0f14;
+    --surface:     #161a22;
+    --surface-2:   #1e2330;
+    --border:      rgba(255, 255, 255, 0.07);
+    --text:        #e8eaf0;
+    --text-muted:  #6b7490;
+    --text-dim:    #3d4460;
+    --accent-blue:   #3b82f6;
+    --accent-green:  #22c55e;
+    --accent-amber:  #f59e0b;
+    --accent-red:    #ef4444;
+    --accent-purple: #a855f7;
+    --delivered-color: #3b82f6;
+    --returned-color:  #22c55e;
+    --net-color:       #f59e0b;
+    --phase-l1: #818cf8;
+    --phase-l2: #38bdf8;
+    --phase-l3: #fb923c;
+    --shadow:        0 4px 24px rgba(0, 0, 0, 0.40);
+    --shadow-hover:  0 8px 32px rgba(0, 0, 0, 0.50);
+    --header-bg-glass:      rgba(13, 15, 20, 0.85);
+    --chart-grid:           rgba(255, 255, 255, 0.04);
+    --chart-tooltip-bg:     rgba(22, 26, 34, 0.95);
+    --chart-tooltip-border: rgba(255, 255, 255, 0.10);
+    --chart-tooltip-title:  #e8eaf0;
+    --chart-tooltip-body:   #9ca3af;
+    color-scheme: dark;
+  }
 }
 
 /* ── Reset ── */
@@ -53,7 +132,7 @@ html, body {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(13, 15, 20, 0.85);
+  background: var(--header-bg-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
@@ -323,9 +402,15 @@ html, body {
 /** Compact header row: direction label + large watt value inline. */
 .power-card-header {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.power-card-headline {
+  display: flex;
   align-items: baseline;
   gap: 10px;
-  margin-bottom: 14px;
 }
 
 .power-direction {
@@ -358,6 +443,19 @@ html, body {
   color: var(--text-muted);
   font-weight: 500;
 }
+
+/** In/out kWh deltas for the selected history window. */
+.power-card-deltas {
+  display: flex;
+  gap: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: "JetBrains Mono", monospace;
+  min-height: 1.1em;
+}
+
+.power-delta-in  { color: var(--delivered-color); }
+.power-delta-out { color: var(--returned-color); }
 
 /* ── Section ── */
 .section-title {
@@ -400,7 +498,7 @@ html, body {
 
 .card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-hover);
 }
 
 /* Accent left-edge glow */
@@ -687,4 +785,53 @@ html, body {
   .cards-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Flip annotation tooltip ── */
+.flip-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 200;
+  background: var(--chart-tooltip-bg);
+  border: 1px solid var(--chart-tooltip-border);
+  border-radius: 6px;
+  padding: 7px 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.ft-dir {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--chart-tooltip-title);
+  margin-bottom: 2px;
+}
+
+.ft-ts {
+  font-size: 0.68rem;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--chart-tooltip-body);
+}
+
+/* ── Theme toggle button ── */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition),
+              background var(--transition);
+  white-space: nowrap;
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent-blue);
 }

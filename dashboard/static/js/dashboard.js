@@ -21,13 +21,40 @@
 
 /* ── Palette ───────────────────────────────────────────────────────────── */
 
-const COLORS = {
-  delivered: "#3b82f6",
-  returned:  "#22c55e",
-  net:       "#f59e0b",
-  l1: "#818cf8",
-  l2: "#38bdf8",
-  l3: "#fb923c",
+/**
+ * Return the current chart palette by reading computed CSS custom properties.
+ * Called at init and after every theme change so chart line colours track
+ * the active theme's accent values.
+ * @returns {{delivered:string, returned:string, net:string, l1:string, l2:string, l3:string}}
+ */
+function chartPalette() {
+  const s = getComputedStyle(document.documentElement);
+  const v = name => s.getPropertyValue(name).trim();
+  return {
+    delivered: v("--delivered-color"),
+    returned:  v("--returned-color"),
+    net:       v("--net-color"),
+    l1:        v("--phase-l1"),
+    l2:        v("--phase-l2"),
+    l3:        v("--phase-l3"),
+  };
+}
+
+/** Mutable palette reference used by chart init and recolor. */
+let COLORS = chartPalette();
+
+/**
+ * X-axis tick configuration per history window.
+ * unit + stepSize are passed directly to Chart.js time scale.
+ * Chart.js aligns generated ticks to clean multiples of stepSize.
+ * @type {Object.<number, {unit: string, stepSize: number}>}
+ */
+const AXIS_CONFIG = {
+    1:   { unit: "minute", stepSize: 5  },
+    6:   { unit: "minute", stepSize: 30 },
+    24:  { unit: "hour",   stepSize: 2  },
+    72:  { unit: "hour",   stepSize: 12 },
+    168: { unit: "day",    stepSize: 1  },
 };
 
 /* ── Shared Chart.js config ─────────────────────────────────────────────── */
@@ -140,13 +167,113 @@ let flipCount = 0;
 let selectedHours = 24;
 
 /**
+ * EMA state for live chart smoothing. Null until the first live reading
+ * arrives. Reset when history reloads so the EMA starts fresh from the
+ * last history point rather than carrying stale state.
+ * @type {object|null}
+ */
+let ema = null;
+
+/**
  * Flip annotation configs keyed by ID, mirrored across all charts.
  * Kept here so updateVoltageAnnotation can merge them with vMin/vMax.
  * @type {Object.<string, object>}
  */
 const flipAnnotations = {};
 
-/* ── DOM ────────────────────────────────────────────────────────────────── */
+/* ── Theme management ───────────────────────────────────────────────────────── */
+
+const THEME_CYCLE  = ["light", "dark", "auto"];
+const THEME_LABELS = { light: "☀️ Light", dark: "🌙 Dark", auto: "◐ Auto" };
+
+/**
+ * Return true when the currently active computed theme is dark.
+ * Handles explicit dark and auto-dark (OS preference).
+ * @returns {boolean}
+ */
+function isDarkTheme() {
+  const t = document.documentElement.dataset.theme;
+  if (t === "dark") return true;
+  if (t === "auto") return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return false;
+}
+
+/**
+ * Apply *theme* ('light' | 'dark' | 'auto'), persist to localStorage,
+ * and update the toggle button label.
+ * @param {string} theme
+ */
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("hegg-theme", theme);
+  const btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = THEME_LABELS[theme] ?? theme;
+  recolorCharts();
+}
+
+/** Advance to the next theme in the cycle. */
+function cycleTheme() {
+  const current = document.documentElement.dataset.theme || "light";
+  const next    = THEME_CYCLE[(THEME_CYCLE.indexOf(current) + 1) % THEME_CYCLE.length];
+  applyTheme(next);
+}
+
+/**
+ * Update Chart.js colour options to match the active theme.
+ * Reads CSS custom properties so the values are always in sync with CSS.
+ * Does nothing if charts are not yet initialised.
+ */
+function recolorCharts() {
+  if (!powerChart) return;
+  const s   = getComputedStyle(document.documentElement);
+  const v   = name => s.getPropertyValue(name).trim();
+  const grid    = v("--chart-grid");
+  const tick    = v("--text-muted");
+  const tipBg   = v("--chart-tooltip-bg");
+  const tipBdr  = v("--chart-tooltip-border");
+  const tipTtl  = v("--chart-tooltip-title");
+  const tipBdy  = v("--chart-tooltip-body");
+
+  // Refresh the mutable palette so newly-pushed data points use updated colours.
+  Object.assign(COLORS, chartPalette());
+
+  Chart.defaults.color = tick;
+
+  [powerChart, ...voltageCharts, ...currentCharts].forEach(chart => {
+    for (const axis of Object.values(chart.options.scales)) {
+      if (axis.ticks) axis.ticks.color = tick;
+      if (axis.grid)  axis.grid.color  = grid;
+    }
+    const tp = chart.options.plugins?.tooltip;
+    if (tp) {
+      tp.backgroundColor = tipBg;
+      tp.borderColor     = tipBdr;
+      tp.titleColor      = tipTtl;
+      tp.bodyColor       = tipBdy;
+    }
+    // Update dataset colours for the power chart segment colouring.
+    chart.data.datasets.forEach(ds => {
+      if (ds.label === "Net") {
+        ds.segment.borderColor     = ctx => ctx.p0.parsed.y >= 0 ? COLORS.delivered : COLORS.returned;
+        ds.segment.backgroundColor = ctx => ctx.p0.parsed.y >= 0
+          ? COLORS.delivered + "22" : COLORS.returned + "22";
+      } else if (ds.label === "V" || ds.label === "A") {
+        // Sparkline datasets keep their original colour — update via index.
+        const idx = voltageCharts.indexOf(chart) !== -1
+          ? voltageCharts.indexOf(chart)
+          : currentCharts.indexOf(chart);
+        if (idx >= 0) {
+          const c = [COLORS.l1, COLORS.l2, COLORS.l3][idx];
+          ds.borderColor     = c;
+          ds.backgroundColor = c + "22";
+        }
+      }
+    });
+    chart.update("none");
+  });
+}
+
+/* ── DOM ───────────────────────────────────────────────────────────── */
 
 let el;
 
@@ -157,6 +284,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     powerDisplay:   document.getElementById("power-display"),
     powerDirection: document.getElementById("power-direction"),
     powerNetVal:    document.getElementById("power-net-val"),
+    powerDeltaIn:   document.getElementById("power-delta-in"),
+    powerDeltaOut:  document.getElementById("power-delta-out"),
     voltageL1:      document.getElementById("voltage-l1"),
     voltageL2:      document.getElementById("voltage-l2"),
     voltageL3:      document.getElementById("voltage-l3"),
@@ -167,6 +296,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   initCharts();
+  recolorCharts();           // seed chart colours from the active theme
   await loadHistory(selectedHours);
   await loadSummary();
   loadDevice();
@@ -176,6 +306,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     selectedHours = parseInt(el.historyRange.value, 10);
     loadHistory(selectedHours);
     loadSummaryDelta(selectedHours);
+  });
+
+  // Theme toggle: click cycles light → dark → auto.
+  const toggleBtn = document.getElementById("theme-toggle");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", cycleTheme);
+    // Set initial label from the theme already applied by the inline script.
+    const savedTheme = document.documentElement.dataset.theme || "light";
+    toggleBtn.textContent = THEME_LABELS[savedTheme] ?? savedTheme;
+  }
+
+  // Re-colour charts when OS preference changes while in auto mode.
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (document.documentElement.dataset.theme === "auto") recolorCharts();
   });
 
   // Minute-level refresh for absolute values; device info is static.
@@ -291,6 +435,7 @@ async function loadHistory(hours) {
   currentExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
   lastWasExporting = null;
   flipCount = 0;
+  ema = null;  // force EMA to re-seed from first live reading
   Object.keys(flipAnnotations).forEach(k => delete flipAnnotations[k]);
   powerChart.options.plugins.annotation.annotations = {};
   voltageCharts.forEach(c => { c.options.plugins.annotation.annotations = {}; });
@@ -325,9 +470,11 @@ async function loadHistory(hours) {
     });
   });
 
-  voltageCharts.forEach((_, i) => updateInlineScale(voltageCharts[i], voltageExtremes[i], 2));
-  currentCharts.forEach((_, i) => updateInlineScale(currentCharts[i], currentExtremes[i], 0.5));
   voltageCharts.forEach((_, i) => updateVoltageAnnotation(i));
+  syncChartScales(voltageCharts, voltageExtremes, 2);
+  syncChartScales(currentCharts, currentExtremes, 0.5);
+
+  applyXAxisConfig(hours);
 
   powerChart.update();
   voltageCharts.forEach(c => c.update());
@@ -392,6 +539,10 @@ async function loadSummaryDelta(hours) {
   const outTotal = (d.energy_returned_t1  ?? 0) + (d.energy_returned_t2  ?? 0);
   setEnergyDelta("energy-in-total-delta",  inTotal,  label, "kWh");
   setEnergyDelta("energy-out-total-delta", outTotal, label, "kWh");
+
+  // Power card inline deltas
+  if (el.powerDeltaIn)  el.powerDeltaIn.textContent  = `↓ ${inTotal.toFixed(2)} kWh / ${label}`;
+  if (el.powerDeltaOut) el.powerDeltaOut.textContent = `↑ ${outTotal.toFixed(2)} kWh / ${label}`;
 
   // Per-tariff breakdown
   setEnergyDelta("energy-in-t1-delta",  d.energy_delivered_t1, label, "kWh");
@@ -532,43 +683,77 @@ function fmt1(v) {
 /* ── Chart append ───────────────────────────────────────────────────────── */
 
 function appendToCharts(r) {
-  const ts = new Date(r.timestamp).getTime();
+  const ts  = new Date(r.timestamp).getTime();
+  const s   = smoothReading(r);  // EMA-smoothed copy for chart points
 
   powerChart.data.datasets[0].data.push({
     x: ts,
-    y: Math.round((r.power_delivered - r.power_returned) * 1000),
+    y: Math.round((s.power_delivered - s.power_returned) * 1000),
   });
 
+  // Use raw r for flip detection — direction changes must be immediate.
   const exporting = r.power_returned > r.power_delivered;
   if (lastWasExporting !== null && exporting !== lastWasExporting) {
     addFlipAnnotation(ts, exporting);
   }
   lastWasExporting = exporting;
 
-  // Voltage
-  [r.voltage_l1, r.voltage_l2, r.voltage_l3].forEach((v, i) => {
-    voltageCharts[i].data.datasets[0].data.push({ x: ts, y: v });
+  // Voltage — smoothed for chart, raw for extremes tracking.
+  ["voltage_l1", "voltage_l2", "voltage_l3"].forEach((f, i) => {
+    voltageCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
+    const v = r[f];
     if (v < voltageExtremes[i].min) { voltageExtremes[i].min = v; updateVoltageAnnotation(i); }
     if (v > voltageExtremes[i].max) { voltageExtremes[i].max = v; updateVoltageAnnotation(i); }
-    updateInlineScale(voltageCharts[i], voltageExtremes[i], 2);
   });
+  syncChartScales(voltageCharts, voltageExtremes, 2);
 
-  // Current
-  [r.current_l1, r.current_l2, r.current_l3].forEach((v, i) => {
-    currentCharts[i].data.datasets[0].data.push({ x: ts, y: v });
+  // Current — smoothed for chart, raw for extremes.
+  ["current_l1", "current_l2", "current_l3"].forEach((f, i) => {
+    currentCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
+    const v = r[f];
     if (v < currentExtremes[i].min) currentExtremes[i].min = v;
     if (v > currentExtremes[i].max) currentExtremes[i].max = v;
-    updateInlineScale(currentCharts[i], currentExtremes[i], 0.5);
   });
+  syncChartScales(currentCharts, currentExtremes, 0.5);
 
   const cutoff = Date.now() - selectedHours * 3600 * 1000;
   trimOldPoints(powerChart, cutoff);
   voltageCharts.forEach(c => trimOldPoints(c, cutoff));
   currentCharts.forEach(c => trimOldPoints(c, cutoff));
 
+  // Slide the X window forward so ticks stay aligned to clock boundaries.
+  applyXAxisConfig(selectedHours);
+
   powerChart.update("none");
   voltageCharts.forEach(c => c.update("none"));
   currentCharts.forEach(c => c.update("none"));
+}
+
+/**
+ * Apply an exponential moving average to a reading for chart smoothing.
+ *
+ * Alpha is derived from the current bucket size so live chart data matches
+ * the resolution of the history API.  Raw values are preserved for DOM
+ * display; only the chart-push path uses the smoothed copy.
+ *
+ * @param {object} r - Raw 1-second reading from SSE.
+ * @returns {object} Smoothed reading (same shape, timestamp unchanged).
+ */
+function smoothReading(r) {
+  const bucketSeconds = Math.max(5, Math.floor((selectedHours * 3600) / 500));
+  const alpha = 2 / (bucketSeconds + 1);
+  if (ema === null) {
+    ema = { ...r };
+    return { ...r };
+  }
+  const s = { ...r };
+  for (const key of ["power_delivered", "power_returned",
+                     "voltage_l1", "voltage_l2", "voltage_l3",
+                     "current_l1", "current_l2", "current_l3"]) {
+    s[key] = alpha * (r[key] ?? 0) + (1 - alpha) * (ema[key] ?? 0);
+  }
+  ema = s;
+  return s;
 }
 
 function trimOldPoints(chart, cutoff) {
@@ -578,6 +763,69 @@ function trimOldPoints(chart, cutoff) {
 }
 
 /* ── Scale helpers ──────────────────────────────────────────────────────── */
+
+/**
+ * Return the number of milliseconds in one tick unit.
+ * @param {string} unit - 'minute' | 'hour' | 'day'
+ * @returns {number}
+ */
+function stepUnitMs(unit) {
+  if (unit === "day")  return 86_400_000;
+  if (unit === "hour") return  3_600_000;
+  return 60_000; // minute
+}
+
+/**
+ * Apply the appropriate X-axis tick unit and step for the given history
+ * window so ticks — and therefore grid lines — fall on clean clock boundaries.
+ *
+ * Chart.js time scale generates intermediate minor ticks in addition to the
+ * labelled major ticks; both produce grid lines.  afterBuildTicks strips the
+ * tick array down to only those whose value is an exact multiple of stepMs,
+ * guaranteeing grid lines land on :00, :05, :10 etc. for the 1 h range.
+ *
+ * @param {number} hours - The currently selected history window.
+ */
+function applyXAxisConfig(hours) {
+  const cfg    = AXIS_CONFIG[hours] ?? AXIS_CONFIG[24];
+  const stepMs = cfg.stepSize * stepUnitMs(cfg.unit);
+  const flooredMin = Math.floor((Date.now() - hours * 3_600_000) / stepMs) * stepMs;
+
+  [powerChart, ...voltageCharts, ...currentCharts].forEach(chart => {
+    const x = chart.options.scales.x;
+    x.time.unit     = cfg.unit;
+    x.time.stepSize = cfg.stepSize;
+    x.min           = flooredMin;
+    if (x.ticks) x.ticks.maxTicksLimit = 100;
+    // Strip any tick not at an exact step boundary — this controls grid lines,
+    // not just labels.
+    x.afterBuildTicks = scale => {
+      scale.ticks = scale.ticks.filter(t => t.value % stepMs === 0);
+    };
+  });
+}
+
+/**
+ * Compute the union Y-axis range across all per-phase extremes and apply the
+ * same min/max to every chart in the group, keeping L1/L2/L3 visually
+ * comparable on the same scale.
+ * @param {import('chart.js').Chart[]} charts
+ * @param {{min:number, max:number}[]} perPhaseExtremes
+ * @param {number} minPad - Minimum absolute padding on each side.
+ */
+function syncChartScales(charts, perPhaseExtremes, minPad) {
+  let globalMin = Infinity, globalMax = -Infinity;
+  perPhaseExtremes.forEach(e => {
+    if (e.min < globalMin) globalMin = e.min;
+    if (e.max > globalMax) globalMax = e.max;
+  });
+  if (!isFinite(globalMin) || !isFinite(globalMax)) return;
+  const pad = Math.max(minPad, (globalMax - globalMin) * 0.25);
+  charts.forEach(c => {
+    c.options.scales.y.min = globalMin - pad;
+    c.options.scales.y.max = globalMax + pad;
+  });
+}
 
 /**
  * Set the Y scale min/max with padding so data lines are never flush with
@@ -598,24 +846,36 @@ function updateInlineScale(chart, extremes, minPad) {
 
 /**
  * Add a vertical flip marker at the given timestamp on ALL charts.
- * The annotation is stored in flipAnnotations so voltage charts can
- * merge it with their own min/max lines.
+ * enter/leave callbacks show a fixed tooltip with the exact timestamp.
  * @param {number}  tsMs     - Timestamp in milliseconds.
  * @param {boolean} toExport - Direction after the flip.
  */
 function addFlipAnnotation(tsMs, toExport) {
   const id    = `flip_${flipCount++}`;
   const color = toExport ? "rgba(34,197,94,0.55)" : "rgba(59,130,246,0.55)";
+  const label = toExport ? "→ Export" : "→ Import";
   const annotation = {
     type: "line", scaleID: "x", value: tsMs,
     borderColor: color, borderWidth: 1, borderDash: [4, 4],
     label: {
-      display: true,
-      content: toExport ? "→ Export" : "→ Import",
-      position: "start",
+      display: true, content: label, position: "start",
       backgroundColor: color, color: "#fff",
-      font: { size: 9, weight: "600" },
-      padding: { x: 4, y: 2 }, rotation: -90,
+      font: { size: 9, weight: "600" }, padding: { x: 4, y: 2 }, rotation: -90,
+    },
+    enter(ctx) {
+      const tip   = document.getElementById("flip-tooltip");
+      const dir   = toExport ? "↑ Export to grid" : "↓ Import from grid";
+      const dt    = new Date(tsMs);
+      const stamp = dt.toLocaleDateString() + " " + dt.toLocaleTimeString();
+      tip.innerHTML =
+        `<div class="ft-dir">${dir}</div><div class="ft-ts">${stamp}</div>`;
+      const rect = ctx.chart.canvas.getBoundingClientRect();
+      tip.style.left    = (rect.left + window.scrollX + ctx.element.x + 10) + "px";
+      tip.style.top     = (rect.top  + window.scrollY + 12) + "px";
+      tip.style.display = "block";
+    },
+    leave() {
+      document.getElementById("flip-tooltip").style.display = "none";
     },
   };
   flipAnnotations[id] = annotation;
