@@ -556,10 +556,10 @@ async function loadSummaryLatest() {
     s = await res.json();
   } catch { return; }
 
-  const inT1  = s.energy_delivered_t1 ?? 0;
-  const inT2  = s.energy_delivered_t2 ?? 0;
-  const outT1 = s.energy_returned_t1  ?? 0;
-  const outT2 = s.energy_returned_t2  ?? 0;
+  const inT1  = s.energy_delivered_tariff1 ?? 0;
+  const inT2  = s.energy_delivered_tariff2 ?? 0;
+  const outT1 = s.energy_returned_tariff1  ?? 0;
+  const outT2 = s.energy_returned_tariff2  ?? 0;
 
   setText("energy-in-total",  (inT1  + inT2).toFixed(1));
   setText("energy-out-total", (outT1 + outT2).toFixed(1));
@@ -586,8 +586,8 @@ async function loadSummaryDelta(hours) {
   const label = hours >= 24 ? `${Math.round(hours / 24)}d` : `${hours}h`;
 
   // Totals (sum of both tariffs)
-  const inTotal  = (d.energy_delivered_t1 ?? 0) + (d.energy_delivered_t2 ?? 0);
-  const outTotal = (d.energy_returned_t1  ?? 0) + (d.energy_returned_t2  ?? 0);
+  const inTotal  = (d.energy_delivered_tariff1 ?? 0) + (d.energy_delivered_tariff2 ?? 0);
+  const outTotal = (d.energy_returned_tariff1  ?? 0) + (d.energy_returned_tariff2  ?? 0);
   setEnergyDelta("energy-in-total-delta",  inTotal,  label, "kWh");
   setEnergyDelta("energy-out-total-delta", outTotal, label, "kWh");
 
@@ -596,10 +596,10 @@ async function loadSummaryDelta(hours) {
   if (el.powerDeltaOut) el.powerDeltaOut.textContent = `↑ ${outTotal.toFixed(2)} kWh / ${label}`;
 
   // Per-tariff breakdown
-  setEnergyDelta("energy-in-t1-delta",  d.energy_delivered_t1, label, "kWh");
-  setEnergyDelta("energy-in-t2-delta",  d.energy_delivered_t2, label, "kWh");
-  setEnergyDelta("energy-out-t1-delta", d.energy_returned_t1,  label, "kWh");
-  setEnergyDelta("energy-out-t2-delta", d.energy_returned_t2,  label, "kWh");
+  setEnergyDelta("energy-in-t1-delta",  d.energy_delivered_tariff1, label, "kWh");
+  setEnergyDelta("energy-in-t2-delta",  d.energy_delivered_tariff2, label, "kWh");
+  setEnergyDelta("energy-out-t1-delta", d.energy_returned_tariff1,  label, "kWh");
+  setEnergyDelta("energy-out-t2-delta", d.energy_returned_tariff2,  label, "kWh");
   setEnergyDelta("gas-delta",           d.gas_delivered,        label, "m³");
 }
 
@@ -612,11 +612,11 @@ async function loadDevice() {
     d = await res.json();
   } catch { return; }
 
-  setText("device-model",  d.model   ?? "—");
-  setText("device-ip",     d.ip      ?? "—");
-  setText("device-serial", d.serial  ?? "—");
-  setText("device-rssi",   d.wifi_rssi == null ? "—" : `${d.wifi_rssi} dBm`);
-  setText("device-sw",     d.sw      ?? "—");
+  setText("device-model",  d.model      ?? "—");
+  setText("device-ip",     d.ip         ?? "—");
+  setText("device-serial", d.serial     ?? "—");
+  setText("device-rssi",   d.wifiRSSI == null ? "—" : `${d.wifiRSSI} dBm`);
+  setText("device-sw",     d.swVersion  ?? "—");
 }
 
 function clearDeltas() {

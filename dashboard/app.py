@@ -100,11 +100,11 @@ def api_device() -> Response:
     info: dict = {}
     if _store is not None:
         s = _store.latest_summary()
-        info["ip"]       = s.get("ip")
-        info["serial"]   = s.get("serial")
-        info["model"]    = s.get("model")
-        info["sw"]       = s.get("sw_version")
-        info["wifi_rssi"] = s.get("wifi_rssi")
+        info["ip"]        = s.get("ip")
+        info["serial"]    = s.get("serial")
+        info["model"]     = s.get("model")
+        info["swVersion"] = s.get("swVersion")
+        info["wifiRSSI"]  = s.get("wifiRSSI")
     return jsonify(info)
 
 

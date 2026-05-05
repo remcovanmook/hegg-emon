@@ -142,40 +142,11 @@ def _broadcast_reading(reading: dict) -> None:
                 pass  # slow client; handler will time out and clean up
 
 
-def _normalise_summary(raw: dict) -> dict:
-    """Remap raw UDP summary packet field names to match the store's output.
-
-    The Hegg device uses ``energy_delivered_tariff1`` / ``energy_returned_tariff1``
-    etc. in its wire format.  The Flask store transforms these to the shorter
-    ``energy_delivered_t1`` / ``energy_returned_t1`` forms, which is what the
-    dashboard JS reads.  This function performs the same mapping so the mini
-    server can serve the same API shape without a database.
-
-    Args:
-        raw: Decoded JSON dict from the device UDP broadcast.
-
-    Returns:
-        Dict with keys matching the Flask store's ``latest_summary()`` output.
-    """
-    return {
-        "serial":              raw.get("serial"),
-        "sw_version":          raw.get("swVersion"),
-        "equipment_id":        raw.get("equipment_id"),
-        "model":               raw.get("model"),
-        "wifi_rssi":           raw.get("wifiRSSI"),
-        "energy_delivered_t1": raw.get("energy_delivered_tariff1"),
-        "energy_delivered_t2": raw.get("energy_delivered_tariff2"),
-        "energy_returned_t1":  raw.get("energy_returned_tariff1"),
-        "energy_returned_t2":  raw.get("energy_returned_tariff2"),
-        "gas_delivered":       raw.get("gas_delivered"),
-    }
-
-
 def _handle_packet(payload: dict, src_ip: str) -> None:
     """Route a decoded UDP packet to the appropriate shared-state slot.
 
     Minute-summary packets (identified by the presence of
-    ``energy_delivered_tariff1``) are stored in ``_latest_summary``.
+    ``energy_delivered_tariff1``) are stored verbatim in ``_latest_summary``.
     All other packets are treated as 1-second readings.
 
     If the source IP differs from the previously seen device, all cached
@@ -195,7 +166,7 @@ def _handle_packet(payload: dict, src_ip: str) -> None:
     _device_ip = src_ip
 
     if "energy_delivered_tariff1" in payload:
-        _latest_summary = _normalise_summary(payload)
+        _latest_summary = payload
         logger.debug("Summary packet received from %s", src_ip)
     else:
         _latest_reading = payload
@@ -385,8 +356,8 @@ class MiniHandler(BaseHTTPRequestHandler):
                 "ip":        _device_ip or None,
                 "serial":    _latest_summary.get("serial"),
                 "model":     _latest_summary.get("model"),
-                "sw":        _latest_summary.get("sw_version"),
-                "wifi_rssi": _latest_summary.get("wifi_rssi"),
+                "swVersion": _latest_summary.get("swVersion"),
+                "wifiRSSI":  _latest_summary.get("wifiRSSI"),
             }
             _json_response(self, info)
 

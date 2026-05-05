@@ -161,9 +161,9 @@ class HeggExporter:
 
         Args:
             summary: Dict as returned by :meth:`~hegg.store.HeggStore.latest_summary`.
-                     Expected keys: ``energy_delivered_t1``, ``energy_delivered_t2``,
-                     ``energy_returned_t1``, ``energy_returned_t2``,
-                     ``gas_delivered``, ``wifi_rssi``.
+                     Expected keys: ``energy_delivered_tariff1``, ``energy_delivered_tariff2``,
+                     ``energy_returned_tariff1``, ``energy_returned_tariff2``,
+                     ``gas_delivered``, ``wifiRSSI``.
         """
         if not summary:
             return
@@ -174,11 +174,11 @@ class HeggExporter:
             if val is not None:
                 gauge.set(val)
 
-        _set(self._energy_delivered.labels(tariff="t1"), "energy_delivered_t1")
-        _set(self._energy_delivered.labels(tariff="t2"), "energy_delivered_t2")
-        _set(self._energy_returned.labels(tariff="t1"),  "energy_returned_t1")
-        _set(self._energy_returned.labels(tariff="t2"),  "energy_returned_t2")
+        _set(self._energy_delivered.labels(tariff="t1"), "energy_delivered_tariff1")
+        _set(self._energy_delivered.labels(tariff="t2"), "energy_delivered_tariff2")
+        _set(self._energy_returned.labels(tariff="t1"),  "energy_returned_tariff1")
+        _set(self._energy_returned.labels(tariff="t2"),  "energy_returned_tariff2")
         _set(self._gas_delivered,                         "gas_delivered")
-        _set(self._wifi_rssi,                             "wifi_rssi")
+        _set(self._wifi_rssi,                             "wifiRSSI")
 
         logger.debug("Prometheus summary updated")

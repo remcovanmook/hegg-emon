@@ -63,12 +63,12 @@ class TestHeggExporter:
     def test_update_summary_energy_and_gas(self, exporter, registry):
         """update_summary() sets cumulative energy and gas gauges."""
         summary = {
-            "energy_delivered_t1": 1234.5,
-            "energy_delivered_t2": 678.9,
-            "energy_returned_t1": 100.1,
-            "energy_returned_t2": 200.2,
-            "gas_delivered": 987.6,
-            "wifi_rssi": -55,
+            "energy_delivered_tariff1": 1234.5,
+            "energy_delivered_tariff2": 678.9,
+            "energy_returned_tariff1":  100.1,
+            "energy_returned_tariff2":  200.2,
+            "gas_delivered":            987.6,
+            "wifiRSSI":                 -55,
         }
         exporter.update_summary(summary)
         assert registry.get_sample_value("hegg_energy_delivered_kwh", {"tariff": "t1"}) == 1234.5

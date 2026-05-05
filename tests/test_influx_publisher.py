@@ -116,14 +116,14 @@ class TestPublishSummary:
         """publish_summary() sends a hegg_summary measurement."""
         pub = _make_v2_publisher()
         summary = {
-            "ts": 1700000000000,
-            "serial": "TEST01",
-            "energy_delivered_t1": 100.0,
-            "energy_delivered_t2": 200.0,
-            "energy_returned_t1": 10.0,
-            "energy_returned_t2": 20.0,
-            "gas_delivered": 50.0,
-            "wifi_rssi": -60,
+            "ts":                       1700000000000,
+            "serial":                   "TEST01",
+            "energy_delivered_tariff1": 100.0,
+            "energy_delivered_tariff2": 200.0,
+            "energy_returned_tariff1":  10.0,
+            "energy_returned_tariff2":  20.0,
+            "gas_delivered":            50.0,
+            "wifiRSSI":                 -60,
         }
         with patch("urllib.request.urlopen", return_value=_mock_response(204)) as mock_open:
             result = pub.publish_summary(summary)
@@ -131,7 +131,7 @@ class TestPublishSummary:
         assert result is True
         req = mock_open.call_args[0][0]
         assert b"hegg_summary" in req.data
-        assert b"energy_delivered_t1" in req.data
+        assert b"energy_delivered_tariff1" in req.data
 
     def test_publish_summary_empty_returns_true_without_request(self):
         """Empty summary produces no HTTP request and returns True."""
