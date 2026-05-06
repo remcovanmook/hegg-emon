@@ -222,6 +222,14 @@ let flipCount = 0;
 let selectedHours = 24;
 
 /**
+ * Cached X-axis configuration for the electricity tab charts.
+ * Built by buildXAxisCache() on range change and every 5 minutes.
+ * Null until the first call; applyXAxisConfig() is a no-op while null.
+ * @type {{unit:string, stepSize:number, stepMs:number, flooredMin:number, afterBuildTicks:function}|null}
+ */
+let xAxisCache = null;
+
+/**
  * EMA state for live chart smoothing. Null until the first live reading
  * arrives. Reset when history reloads so the EMA starts fresh from the
  * last history point rather than carrying stale state.
@@ -406,7 +414,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Slide the X-axis min forward once per minute so the live edge stays
   // current without rebuilding axis config on every SSE tick.
-  setInterval(() => applyXAxisConfig(selectedHours), 60_000);
+  // Rebuild the X-axis cache every 5 minutes. The smallest step across all
+  // history windows is 5 minutes (1 h window), so flooredMin never drifts
+  // by more than one step between rebuilds.
+  setInterval(() => { buildXAxisCache(selectedHours); applyXAxisConfig(); }, 5 * 60_000);
 
   // Clock — updates every second.
   const tickClock = () => setText("header-time", new Date().toLocaleTimeString());
@@ -616,7 +627,8 @@ async function loadHistory(hours) {
   // minFloor=0 prevents the current Y axis from going negative.
   syncChartScales(currentCharts, currentExtremes, 0);
 
-  applyXAxisConfig(hours);
+  buildXAxisCache(hours);
+  applyXAxisConfig();
 
   powerChart.update();
   voltageCharts.forEach(c => c.update());
@@ -877,7 +889,8 @@ async function loadUsageCharts() {
     exportRevenue.push(price !== null ? -(+(ret1 + ret2) * price).toFixed(4) : 0);
   }
 
-  applyXAxisConfig(selectedHours);
+  // Cache is already current from loadHistory; just apply it.
+  applyXAxisConfig();
 
   if (usageChart) {
     usageChart.data.labels = labels;
@@ -1173,32 +1186,59 @@ function stepUnitMs(unit) {
 }
 
 /**
- * Apply the appropriate X-axis tick unit and step for the given history
- * window so ticks — and therefore grid lines — fall on clean clock boundaries.
+ * Compute and cache the X-axis configuration for the given history window.
  *
- * Chart.js time scale generates intermediate minor ticks in addition to the
- * labelled major ticks; both produce grid lines.  afterBuildTicks strips the
- * tick array down to only those whose value is an exact multiple of stepMs,
- * guaranteeing grid lines land on :00, :05, :10 etc. for the 1 h range.
+ * The derived values break down as follows:
+ *   - unit / stepSize: determined solely by the selected window; constant
+ *     until the user changes the range selector.
+ *   - stepMs: derived from the above; same lifetime.
+ *   - afterBuildTicks: a closure over stepMs; created once here and reused
+ *     across all charts and all subsequent applyXAxisConfig() calls.
+ *   - flooredMin: depends on Date.now(); needs refreshing periodically so
+ *     the live edge of the axis stays current.  The smallest step in
+ *     AXIS_CONFIG is 5 minutes (1 h window), so rebuilding every 5 minutes
+ *     means flooredMin drifts by at most one step between rebuilds.
+ *
+ * Call this whenever selectedHours changes, or every 5 minutes.
+ * Follow with applyXAxisConfig() to push the values to the charts.
  *
  * @param {number} hours - The currently selected history window.
  */
-function applyXAxisConfig(hours) {
+function buildXAxisCache(hours) {
   const cfg    = AXIS_CONFIG[hours] ?? AXIS_CONFIG[24];
   const stepMs = cfg.stepSize * stepUnitMs(cfg.unit);
-  const flooredMin = Math.floor((Date.now() - hours * 3_600_000) / stepMs) * stepMs;
+  xAxisCache = {
+    unit:     cfg.unit,
+    stepSize: cfg.stepSize,
+    stepMs,
+    flooredMin: Math.floor((Date.now() - hours * 3_600_000) / stepMs) * stepMs,
+    /**
+     * Filter Chart.js ticks to only those at exact step boundaries.
+     * This controls grid-line positions as well as tick labels.
+     * @param {import('chart.js').Scale} scale
+     */
+    afterBuildTicks(scale) {
+      scale.ticks = scale.ticks.filter(t => t.value % stepMs === 0);
+    },
+  };
+}
 
+/**
+ * Push the cached X-axis configuration to all electricity-tab charts.
+ *
+ * Reads from xAxisCache; does nothing if the cache has not been built yet.
+ * The same afterBuildTicks function reference is written to every chart so
+ * Chart.js holds one shared instance rather than one closure per chart.
+ */
+function applyXAxisConfig() {
+  if (!xAxisCache) return;
   [powerChart, ...voltageCharts, ...currentCharts].forEach(chart => {
     const x = chart.options.scales.x;
-    x.time.unit     = cfg.unit;
-    x.time.stepSize = cfg.stepSize;
-    x.min           = flooredMin;
+    x.time.unit       = xAxisCache.unit;
+    x.time.stepSize   = xAxisCache.stepSize;
+    x.min             = xAxisCache.flooredMin;
+    x.afterBuildTicks = xAxisCache.afterBuildTicks;
     if (x.ticks) x.ticks.maxTicksLimit = 100;
-    // Strip any tick not at an exact step boundary — this controls grid lines,
-    // not just labels.
-    x.afterBuildTicks = scale => {
-      scale.ticks = scale.ticks.filter(t => t.value % stepMs === 0);
-    };
   });
 }
 
