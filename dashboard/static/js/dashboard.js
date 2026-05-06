@@ -244,6 +244,21 @@ let ema = null;
  */
 const flipAnnotations = {};
 
+/**
+ * Yield control back to the browser's task queue.
+ *
+ * Inserting this await inside a long async function lets the browser
+ * process pending events (paint, input, SSE messages) before the
+ * synchronous work after the await runs.  A zero-delay setTimeout
+ * is used rather than queueMicrotask because microtasks do not yield
+ * to the render pipeline.
+ *
+ * @returns {Promise<void>}
+ */
+function yieldToMain() {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 /* ── Theme management ───────────────────────────────────────────────────────── */
 
 const THEME_CYCLE  = ["light", "dark", "auto"];
@@ -354,7 +369,7 @@ function recolorCharts() {
 
 let el;
 
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
   el = {
     statusDot:      document.getElementById("status-dot"),
     statusLabel:    document.getElementById("status-label"),
@@ -374,10 +389,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   initCharts();
   recolorCharts();           // seed chart colours from the active theme
-  await loadHistory(selectedHours);
-  await loadSummary();
-  loadDevice();
+
+  // Start the SSE stream and background fetches concurrently.
+  // loadHistory is async and will populate charts when the fetch resolves;
+  // there is no reason to delay connectSSE or loadSummary while waiting
+  // for that to complete.
   connectSSE();
+  loadHistory(selectedHours);
+  loadSummary();
+  loadDevice();
 
   el.historyRange.addEventListener("change", () => {
     selectedHours = Number.parseInt(el.historyRange.value, 10);
@@ -581,6 +601,10 @@ async function loadHistory(hours) {
   } catch { return; }
 
   if (!data || data.length === 0) return;
+
+  // Yield to the browser before the synchronous processing block so that
+  // any queued renders, input events, or SSE messages get a chance to run.
+  await yieldToMain();
 
   // Reset tracked state.
   voltageExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
