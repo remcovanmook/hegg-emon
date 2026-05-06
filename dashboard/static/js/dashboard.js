@@ -464,6 +464,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Tab buttons.
   document.getElementById("tab-btn-electricity").addEventListener("click", () => switchTab("electricity"));
   document.getElementById("tab-btn-usage").addEventListener("click",       () => switchTab("usage"));
+  document.getElementById("tab-btn-forecast").addEventListener("click",    () => switchTab("forecast"));
 
   // Minute-level refresh for absolute values; device info is static.
   setInterval(loadSummary, 60_000);
@@ -476,7 +477,10 @@ document.addEventListener("DOMContentLoaded", () => {
   setTimeout(() => {
     initUsageCharts();
     loadUsageCharts();
+    initForecastChart();
+    loadForecastChart();
     setInterval(loadUsageCharts, 60 * 60_000);
+    setInterval(loadForecastChart, 15 * 60_000); // refresh forecast every 15 min
   }, 0);
 
   // Slide the X-axis min forward once per minute so the live edge stays
@@ -1170,6 +1174,138 @@ async function loadUsageCharts() {
   const totalGas = gas.reduce((a, b) => a + b, 0);
   setText("gas-total-val", totalGas.toFixed(3));
 
+}
+
+/* ── Forecast & Pricing tab ────────────────────────────────────────────── */
+
+function initForecastChart() {
+  const ctx = document.getElementById("chart-forecast");
+  if (!ctx) return;
+  forecastChart = new Chart(ctx, {
+    type: "line",
+    data: { datasets: [] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: {
+          type: "time",
+          grid: { color: () => WYE_CSS.grid, drawBorder: false },
+          ticks: { color: () => WYE_CSS.text, maxRotation: 0, autoSkip: true, autoSkipPadding: 20 },
+        },
+        yPrice: {
+          type: "linear",
+          position: "left",
+          title: { display: true, text: "Price (€/unit)" },
+          grid: { color: () => WYE_CSS.grid, drawBorder: false },
+          ticks: { color: () => WYE_CSS.text },
+        },
+        yWeather: {
+          type: "linear",
+          position: "right",
+          title: { display: true, text: "Temp / Solar" },
+          grid: { display: false },
+          ticks: { color: () => WYE_CSS.text },
+        }
+      },
+      plugins: {
+        legend: { display: true, position: "bottom", labels: { color: () => WYE_CSS.text } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const val = ctx.raw.y;
+              if (ctx.dataset.label.includes("Solar")) return `${ctx.dataset.label}: ${val} W/m²`;
+              if (ctx.dataset.label.includes("Temp")) return `${ctx.dataset.label}: ${val} °C`;
+              return `${ctx.dataset.label}: €${val.toFixed(3)}`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+let currentForecastFetchId = 0;
+async function loadForecastChart() {
+  const fetchId = ++currentForecastFetchId;
+  let pricesElec, pricesGas, weather;
+  try {
+    const [rPE, rPG, rW] = await Promise.all([
+      fetch(`/api/prices?hours=24`),
+      fetch(`/api/prices/gas?hours=24`),
+      fetch(`/api/weather?hours=24`),
+    ]);
+    if (fetchId !== currentForecastFetchId) return;
+    pricesElec = (rPE.ok && rPE.status !== 204) ? await rPE.json() : [];
+    pricesGas = (rPG.ok && rPG.status !== 204) ? await rPG.json() : [];
+    weather = (rW.ok && rW.status !== 204) ? await rW.json() : [];
+  } catch {
+    return;
+  }
+
+  // Update DOM current values
+  const now = Date.now();
+  const currentElec = pricesElec.find(p => p.ts_start <= now && p.ts_end > now);
+  const currentGas = pricesGas.find(p => p.ts_start <= now && p.ts_end > now);
+  
+  if (currentElec) document.getElementById("current-elec-price").textContent = `€${currentElec.price_eur_kwh.toFixed(3)}`;
+  if (currentGas) document.getElementById("current-gas-price").textContent = `€${currentGas.price_eur_m3.toFixed(3)}`;
+
+  // For weather, we find the closest hourly bucket
+  let currentTempStr = "—";
+  if (weather.length > 0) {
+    const sortedWeather = [...weather].sort((a, b) => Math.abs(a.ts - now) - Math.abs(b.ts - now));
+    currentTempStr = `${sortedWeather[0].temperature_c.toFixed(1)} °C`;
+  }
+  document.getElementById("current-temp").textContent = currentTempStr;
+
+  if (forecastChart) {
+    const dsElec = {
+      label: "Electricity (EPEX)",
+      data: pricesElec.map(p => ({ x: p.ts_start, y: p.price_eur_kwh })),
+      borderColor: COLORS.delivered,
+      backgroundColor: COLORS.delivered + "33", // 20% opacity
+      yAxisID: "yPrice",
+      stepped: "before",
+      fill: "origin"
+    };
+    // Gas prices step daily. We duplicate points at start and end of day so stepped line draws correctly.
+    const gasData = [];
+    pricesGas.forEach(p => {
+      gasData.push({ x: p.ts_start, y: p.price_eur_m3 });
+      gasData.push({ x: p.ts_end, y: p.price_eur_m3 });
+    });
+    const dsGas = {
+      label: "Gas (TTF)",
+      data: gasData,
+      borderColor: COLORS.returned,
+      backgroundColor: COLORS.returned + "33",
+      yAxisID: "yPrice",
+      stepped: false, // already stepped via point duplication
+      fill: "origin"
+    };
+    const dsTemp = {
+      label: "Temperature",
+      data: weather.map(w => ({ x: w.ts, y: w.temperature_c })),
+      borderColor: COLORS.voltage,
+      yAxisID: "yWeather",
+      tension: 0.4
+    };
+    const dsSolar = {
+      label: "Solar Radiation",
+      data: weather.map(w => ({ x: w.ts, y: w.solar_wm2 })),
+      borderColor: "#fadb14", // yellow/sun
+      backgroundColor: "#fadb1433",
+      yAxisID: "yWeather",
+      fill: true,
+      tension: 0.4
+    };
+
+    forecastChart.data.datasets = [dsElec, dsGas, dsTemp, dsSolar];
+    forecastChart.update();
+  }
 }
 
 /* ── SSE ────────────────────────────────────────────────────────────────── */

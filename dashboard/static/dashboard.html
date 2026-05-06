@@ -135,6 +135,8 @@
               role="tab" aria-selected="true" aria-controls="tab-electricity">Electricity</button>
       <button class="tab-btn" id="tab-btn-usage"
               role="tab" aria-selected="false" aria-controls="tab-usage">Usage &amp; Cost</button>
+      <button class="tab-btn" id="tab-btn-forecast"
+              role="tab" aria-selected="false" aria-controls="tab-forecast">Forecast &amp; Pricing</button>
     </nav>
 
     <!-- ══ Tab 1: Electricity ══════════════════════════════════════════════ -->
@@ -414,6 +416,32 @@
       </section>
 
     </div><!-- /#tab-usage -->
+
+    <!-- ══ Tab 3: Forecast & Pricing ═══════════════════════════════════════ -->
+    <div id="tab-forecast" role="tabpanel" aria-labelledby="tab-btn-forecast" hidden>
+      <section class="section" aria-labelledby="forecast-heading">
+        <h2 id="forecast-heading" class="section-title">Day-Ahead Outlook</h2>
+        <div class="chart-card">
+          <div class="summary-row">
+            <div class="summary-metric">
+              <span class="summary-label">Current Electricity</span>
+              <span class="summary-value" id="current-elec-price">—</span>
+            </div>
+            <div class="summary-metric">
+              <span class="summary-label">Current Gas</span>
+              <span class="summary-value" id="current-gas-price">—</span>
+            </div>
+            <div class="summary-metric">
+              <span class="summary-label">Current Temp</span>
+              <span class="summary-value" id="current-temp">—</span>
+            </div>
+          </div>
+          <div class="chart-wrapper" style="height: 400px;">
+            <canvas id="chart-forecast" aria-label="Forecasted electricity and gas prices with weather"></canvas>
+          </div>
+        </div>
+      </section>
+    </div><!-- /#tab-forecast -->
 
   </main>
 
