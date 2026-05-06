@@ -469,9 +469,15 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(loadSummary, 60_000);
   setInterval(loadDevice,  300_000);
 
-  // Usage & cost charts: load on startup, refresh once per hour.
-  loadUsageCharts();
-  setInterval(loadUsageCharts, 60 * 60_000);
+  // Usage-tab charts are on a hidden panel and only receive data after an
+  // async fetch resolves. Deferring construction yields the main thread so
+  // the browser can paint the initial layout before the second round of
+  // Chart.js init work runs.
+  setTimeout(() => {
+    initUsageCharts();
+    loadUsageCharts();
+    setInterval(loadUsageCharts, 60 * 60_000);
+  }, 0);
 
   // Slide the X-axis min forward once per minute so the live edge stays
   // current without rebuilding axis config on every SSE tick.
@@ -495,6 +501,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // Canvas redraws are the primary paint cost; reducing from 1 Hz to 0.2 Hz
   // cuts that cost by 5x with no perceptible change on any history window.
   setInterval(() => {
+    // Install any resolved history frame before draining live data.
+    // Moved here from appendToCharts so history installation is a render
+    // concern rather than a data-pipeline concern.
+    applyPendingFrame();
+
     // Drain staged live data into chart instances before updating meta.
     // This ensures chart.data and the pixel-position meta computed by
     // update() are always in sync, so hover renders never see stale data.
@@ -527,7 +538,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 /* ── Chart init ─────────────────────────────────────────────────────────── */
 
-/** Initialise all Chart.js instances. */
+/** Initialise electricity-tab Chart.js instances (power, voltage, current). */
 function initCharts() {
   Chart.defaults.color = "#6b7490";
 
@@ -539,17 +550,14 @@ function initCharts() {
   };
   powerOpts.scales.y.title = { display: true, text: "W", color: "#6b7490", font: { size: 11 } };
 
-  // Power chart: net (W); blue above zero = import, green below = export.
-  // segment colours each line segment based on sign of the starting point.
-  // fill: "origin" shades the area between the line and zero.
   powerChart = new Chart(document.getElementById("chart-power"), {
     type: "line",
     data: {
       datasets: [{
         label: "Net",
         data: [],
-        borderColor: COLORS.net,           // fallback before first point
-        backgroundColor: "transparent",   // overridden per-segment
+        borderColor: COLORS.net,
+        backgroundColor: "transparent",
         fill: "origin",
         parsing: false,
         tension: 0.3,
@@ -590,7 +598,17 @@ function initCharts() {
       options: makeInlineOpts(v => v.toFixed(1), "A"),
     }));
   });
+}
 
+/**
+ * Initialise the three usage-tab Chart.js instances (cost, usage, gas).
+ *
+ * Called via setTimeout(fn, 0) in DOMContentLoaded so these hidden-tab
+ * charts do not block the initial paint. They are not needed until
+ * loadUsageCharts() resolves its async fetch, which always takes longer
+ * than a single yielded task.
+ */
+function initUsageCharts() {
   // Hourly cost bar chart: import cost (positive), export revenue (negative).
   costChart = new Chart(document.getElementById("chart-cost"), {
     type: "bar",
@@ -1147,8 +1165,18 @@ async function loadUsageCharts() {
 
 /* ── SSE ────────────────────────────────────────────────────────────────── */
 
-let eventSource = null;
+let eventSource    = null;
 let reconnectDelay = 2000;
+
+/**
+ * Raw SSE readings waiting to be processed by the rAF consumer.
+ * The SSE message handler pushes here and exits immediately; all
+ * processing (DOM updates, EMA, pendingLive staging) happens in
+ * drainSSEBuffer() which runs inside a requestAnimationFrame.
+ * @type {object[]}
+ */
+const sseBuffer = [];
+let   sseRafPending = false;
 
 function connectSSE() {
   setStatus("connecting", "Connecting…");
@@ -1160,8 +1188,13 @@ function connectSSE() {
   });
 
   eventSource.addEventListener("message", event => {
-    try { applyReading(JSON.parse(event.data)); }
-    catch (err) { console.warn("SSE parse error:", err); }
+    try {
+      sseBuffer.push(JSON.parse(event.data));
+      if (!sseRafPending) {
+        sseRafPending = true;
+        requestAnimationFrame(drainSSEBuffer);
+      }
+    } catch (err) { console.warn("SSE parse error:", err); }
   });
 
   eventSource.addEventListener("error", () => {
@@ -1178,6 +1211,21 @@ function connectSSE() {
 function setStatus(state, label) {
   el.statusDot.className     = `status-dot ${state}`;
   el.statusLabel.textContent = label;
+}
+
+/**
+ * rAF consumer for the SSE data pipeline.
+ *
+ * Scheduled by the SSE message handler (one rAF per batch, not a permanent
+ * loop). Drains sseBuffer, applying each reading to the DOM and staging
+ * chart data into pendingLive. Running inside rAF naturally synchronises
+ * DOM text updates with the browser's paint cycle.
+ */
+function drainSSEBuffer() {
+  sseRafPending = false;
+  while (sseBuffer.length > 0) {
+    applyReading(sseBuffer.shift());
+  }
 }
 
 /* ── Reading application ────────────────────────────────────────────────── */
@@ -1253,9 +1301,6 @@ function fmt1(v) {
 /* ── Chart append ───────────────────────────────────────────────────────── */
 
 function appendToCharts(r) {
-  // Apply any pending history frame before adding the live point.
-  applyPendingFrame();
-
   const ts = new Date(r.timestamp).getTime();
   const s  = smoothReading(r);  // EMA-smoothed copy for chart points
 
