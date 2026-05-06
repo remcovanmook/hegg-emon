@@ -890,7 +890,9 @@ function switchTab(tabId) {
   // Also force a data repaint so any updates that arrived while the
   // electricity tab was hidden are rendered immediately on switch.
   if (tabId === "usage") {
-    [usageChart, costChart, gasChart].forEach(c => c && c.resize());
+    [usageChart, costChart, gasChart].forEach(c => {
+      if (c) { c.resize(); c.update("none"); }
+    });
   } else {
     [powerChart, ...voltageCharts, ...currentCharts].forEach(c => {
       if (c) { c.resize(); c.update("none"); }
@@ -1012,26 +1014,30 @@ async function loadUsageCharts() {
   // Cache is already current from loadHistory; just apply it.
   applyXAxisConfig();
 
+  // Data is always written to chart instances regardless of visibility so
+  // it is ready when the tab is revealed. Only the repaint is gated.
   if (usageChart) {
-    usageChart.data.labels = labels;
-    usageChart.data.datasets[0].data = d1;
-    usageChart.data.datasets[1].data = d2;
-    usageChart.data.datasets[2].data = r1;
-    usageChart.data.datasets[3].data = r2;
-    usageChart.update("none");
+    usageChart.data.labels            = labels;
+    usageChart.data.datasets[0].data  = d1;
+    usageChart.data.datasets[1].data  = d2;
+    usageChart.data.datasets[2].data  = r1;
+    usageChart.data.datasets[3].data  = r2;
   }
-
   if (gasChart) {
-    gasChart.data.labels = labels;
+    gasChart.data.labels           = labels;
     gasChart.data.datasets[0].data = gas;
-    gasChart.update("none");
   }
-
   if (costChart) {
-    costChart.data.labels = labels;
+    costChart.data.labels           = labels;
     costChart.data.datasets[0].data = importCost;
     costChart.data.datasets[1].data = exportRevenue;
-    costChart.update("none");
+  }
+
+  // Only repaint if the usage tab is currently visible.
+  if (usageChart && !usageChart.canvas.closest("[hidden]")) {
+    usageChart.update("none");
+    if (gasChart)  gasChart.update("none");
+    if (costChart) costChart.update("none");
   }
 
   // Period label, matching the format used by loadSummaryDelta.
