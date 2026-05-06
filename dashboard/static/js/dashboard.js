@@ -372,7 +372,7 @@ function recolorCharts() {
 
   Chart.defaults.color = tick;
 
-  [powerChart, ...voltageCharts, ...currentCharts, usageChart, costChart, gasChart].filter(Boolean).forEach(chart => {
+  [powerChart, ...voltageCharts, ...currentCharts, usageChart, costChart, gasChart, gasCostChart, forecastChart].filter(Boolean).forEach(chart => {
     for (const axis of Object.values(chart.options.scales)) {
       if (axis.ticks) axis.ticks.color = tick;
       if (axis.grid)  axis.grid.color  = grid;
@@ -667,6 +667,22 @@ function initUsageCharts() {
       }],
     },
     options: _barOpts("m³", v => `${v.toFixed(3)} m³`, ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)} m³`),
+  });
+
+  // Hourly gas cost.
+  gasCostChart = new Chart(document.getElementById("chart-gas-cost"), {
+    type: "bar",
+    data: {
+      labels: [],
+      datasets: [{
+        label: "Gas Cost (€)",
+        data: [],
+        backgroundColor: "#f59e0bcc",
+        borderRadius: 3,
+        borderSkipped: false,
+      }],
+    },
+    options: _barOpts("€", v => `€${v.toFixed(3)}`, ctx => `${ctx.dataset.label}: €${Math.abs(ctx.parsed.y).toFixed(4)}`),
   });
 }
 
@@ -989,7 +1005,7 @@ function switchTab(tabId) {
   // Also force a data repaint so any updates that arrived while the
   // electricity tab was hidden are rendered immediately on switch.
   if (tabId === "usage") {
-    [usageChart, costChart, gasChart].forEach(c => {
+    [usageChart, costChart, gasChart, gasCostChart].forEach(c => {
       if (c) { c.resize(); c.update("none"); }
     });
   } else {
@@ -1055,6 +1071,8 @@ function _barOpts(yLabel, tickFmt, tooltipFmt, stacked = false) {
 /** @type {Chart|null} */ let costChart  = null;
 /** @type {Chart|null} */ let usageChart = null;
 /** @type {Chart|null} */ let gasChart   = null;
+/** @type {Chart|null} */ let gasCostChart = null;
+/** @type {Chart|null} */ let forecastChart = null;
 
 /**
  * Fetch hourly consumption and price data and populate all three Usage &
@@ -1067,15 +1085,18 @@ let currentUsageFetchId = 0;
 async function loadUsageCharts() {
   const fetchId = ++currentUsageFetchId;
   let consumption, prices;
+  let gasPrices;
   try {
-    const [rC, rP] = await Promise.all([
+    const [rC, rP, rGP] = await Promise.all([
       fetch(`/api/summary/hourly?hours=${selectedHours}`),
       fetch(`/api/prices?hours=${selectedHours}`),
+      fetch(`/api/prices/gas?hours=${selectedHours}`),
     ]);
     if (fetchId !== currentUsageFetchId) return;
     if (!rC.ok || rC.status === 204) return;
     consumption = await rC.json();
     prices = rP.ok && rP.status !== 204 ? await rP.json() : [];
+    gasPrices = rGP.ok && rGP.status !== 204 ? await rGP.json() : [];
   } catch {
     return;
   }
@@ -1086,6 +1107,11 @@ async function loadUsageCharts() {
   const priceMap = {};
   for (const p of prices) priceMap[p.ts_start] = p.price_eur_kwh;
 
+  const getGasPrice = (ts) => {
+    const p = gasPrices.find(g => g.ts_start <= ts && g.ts_end > ts);
+    return p ? p.price_eur_m3 : null;
+  };
+
   // Generate every UTC hour slot for the full selected window.
   // Hours with no data get 0 so the x-axis spans the complete range.
   const HOUR_MS  = 3_600_000;
@@ -1093,11 +1119,12 @@ async function loadUsageCharts() {
   const startMs  = Math.floor((nowMs - selectedHours * HOUR_MS) / HOUR_MS) * HOUR_MS;
 
   const labels = [], d1 = [], d2 = [], r1 = [], r2 = [], gas = [];
-  const importCost = [], exportRevenue = [];
+  const importCost = [], exportRevenue = [], gasCost = [];
 
   for (let h = startMs; h <= nowMs; h += HOUR_MS) {
     const c     = consumMap[h];
     const price = priceMap[h] ?? null;
+    const gasP  = getGasPrice(h);
     const del1  = c ? (c.energy_delivered_tariff1 ?? 0) : 0;
     const del2  = c ? (c.energy_delivered_tariff2 ?? 0) : 0;
     const ret1  = c ? (c.energy_returned_tariff1  ?? 0) : 0;
@@ -1112,6 +1139,7 @@ async function loadUsageCharts() {
     gas.push(+(gasV.toFixed(4)));
     importCost.push(   price !== null ? +((del1 + del2) * price).toFixed(4) : 0);
     exportRevenue.push(price !== null ? -(+(ret1 + ret2) * price).toFixed(4) : 0);
+    gasCost.push(      gasP  !== null ? +(gasV * gasP).toFixed(4) : 0);
   }
 
   // Cache is already current from loadHistory; just apply it.
@@ -1135,12 +1163,17 @@ async function loadUsageCharts() {
     costChart.data.datasets[0].data = importCost;
     costChart.data.datasets[1].data = exportRevenue;
   }
+  if (gasCostChart) {
+    gasCostChart.data.labels           = labels;
+    gasCostChart.data.datasets[0].data = gasCost;
+  }
 
   // Only repaint if the usage tab is currently visible.
   if (usageChart && !usageChart.canvas.closest("[hidden]")) {
     usageChart.update("none");
     if (gasChart)  gasChart.update("none");
     if (costChart) costChart.update("none");
+    if (gasCostChart) gasCostChart.update("none");
   }
 
   // Period label, matching the format used by loadSummaryDelta.
@@ -1173,6 +1206,9 @@ async function loadUsageCharts() {
   // Gas totals.
   const totalGas = gas.reduce((a, b) => a + b, 0);
   setText("gas-total-val", totalGas.toFixed(3));
+  
+  const totalGasCost = gasCost.reduce((a, b) => a + b, 0);
+  setText("cost-gas-total", totalGasCost.toFixed(2));
 
 }
 
