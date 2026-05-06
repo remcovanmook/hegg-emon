@@ -35,7 +35,7 @@ import socket
 import sys
 
 from hegg.reading import HeggReading
-from hegg.store import HeggStore, default_db_path
+from hegg.store import default_db_path, get_store
 
 logging.basicConfig(
     level=logging.INFO,
@@ -162,7 +162,7 @@ def run(udp_port: int, db_path: str, device_ip: str = "") -> None:
         device_ip: Lock to this source IP immediately.  Auto-detects from
                    the first seen packet if empty.
     """
-    store = HeggStore(path=db_path)
+    store = get_store(db_path)
 
     sock = _open_socket(udp_port)
     sock.settimeout(1.0)
