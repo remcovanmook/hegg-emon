@@ -230,6 +230,15 @@ let selectedHours = 24;
 let xAxisCache = null;
 
 /**
+ * Pending computed history frame produced by loadHistory().
+ * Consumed and cleared by applyPendingFrame(), which is called at the
+ * top of appendToCharts() (SSE tick) and via requestAnimationFrame
+ * as a fallback when SSE is not yet connected.
+ * @type {object|null}
+ */
+let pendingHistoryFrame = null;
+
+/**
  * EMA state for live chart smoothing. Null until the first live reading
  * arrives. Reset when history reloads so the EMA starts fresh from the
  * last history point rather than carrying stale state.
@@ -589,7 +598,13 @@ function makeDataset(label, color, fill = true) {
 /* ── History load ───────────────────────────────────────────────────────── */
 
 /**
- * Fetch bucketed history and rebuild all charts.
+ * Fetch bucketed history, compute all chart data in a single pass, and
+ * store the result in pendingHistoryFrame for the render path to pick up.
+ *
+ * All data transformation happens in computeHistoryFrame() — no chart
+ * mutations occur here. The rAF call at the end is a fallback for the
+ * case where SSE is not yet connected and appendToCharts() never fires.
+ *
  * @param {number} hours
  */
 async function loadHistory(hours) {
@@ -606,66 +621,138 @@ async function loadHistory(hours) {
   // any queued renders, input events, or SSE messages get a chance to run.
   await yieldToMain();
 
-  // Reset tracked state.
-  voltageExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
-  currentExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
-  lastWasExporting = null;
-  flipCount = 0;
-  ema = null;  // force EMA to re-seed from first live reading
-  Object.keys(flipAnnotations).forEach(k => delete flipAnnotations[k]);
-  powerChart.options.plugins.annotation.annotations = {};
-  voltageCharts.forEach(c => { c.options.plugins.annotation.annotations = {}; });
-  currentCharts.forEach(c => { c.options.plugins.annotation.annotations = {}; });
+  pendingHistoryFrame = computeHistoryFrame(data, hours);
 
-  powerChart.data.datasets[0].data = toXY(data, r =>
-    Math.round((r.power_delivered - r.power_returned) * 1000)
-  );
+  // Apply on the next animation frame in case SSE hasn't connected yet.
+  requestAnimationFrame(applyPendingFrame);
+}
 
+/**
+ * Compute all chart data from a history payload in a single pass over
+ * the data array.
+ *
+ * This is a pure function: it does not read or write any module-level
+ * state, and it does not touch the DOM or any Chart.js instance.
+ * The returned frame is applied to charts by applyPendingFrame().
+ *
+ * @param {object[]} data   - Array of bucketed readings from /api/history.
+ * @param {number}   hours  - The requested history window (passed through
+ *                            so the axis cache can be built on apply).
+ * @returns {object} Computed frame ready for applyPendingFrame().
+ */
+function computeHistoryFrame(data, hours) {
   const vFields = ["voltage_l1", "voltage_l2", "voltage_l3"];
   const cFields = ["current_l1", "current_l2", "current_l3"];
-  vFields.forEach((f, i) => { voltageCharts[i].data.datasets[0].data = toXY(data, r => r[f]); });
-  cFields.forEach((f, i) => { currentCharts[i].data.datasets[0].data = toXY(data, r => r[f]); });
 
-  // Compute annotations and extremes from history.
-  data.forEach((r, idx) => {
-    const exporting = r.power_returned > r.power_delivered;
-    if (idx > 0 && exporting !== lastWasExporting) {
-      addFlipAnnotation(new Date(r.timestamp).getTime(), exporting);
+  // Pre-allocate output arrays for all 7 datasets.
+  const powerData    = new Array(data.length);
+  const voltageData  = [new Array(data.length), new Array(data.length), new Array(data.length)];
+  const currentData  = [new Array(data.length), new Array(data.length), new Array(data.length)];
+
+  const vExtremes = [
+    { min: Infinity, max: -Infinity },
+    { min: Infinity, max: -Infinity },
+    { min: Infinity, max: -Infinity },
+  ];
+  const cExtremes = [
+    { min: Infinity, max: -Infinity },
+    { min: Infinity, max: -Infinity },
+    { min: Infinity, max: -Infinity },
+  ];
+
+  const newFlipAnnotations = {};
+  let localFlipCount = 0;
+  let prevExporting  = null;
+  let lastExporting  = null;
+
+  for (let idx = 0; idx < data.length; idx++) {
+    const r  = data[idx];
+    const ts = new Date(r.timestamp).getTime();
+
+    powerData[idx] = {
+      x: ts,
+      y: Math.round((r.power_delivered - r.power_returned) * 1000),
+    };
+
+    for (let i = 0; i < 3; i++) {
+      const v = r[vFields[i]];
+      voltageData[i][idx] = { x: ts, y: v };
+      if (v < vExtremes[i].min) vExtremes[i].min = v;
+      if (v > vExtremes[i].max) vExtremes[i].max = v;
+
+      const c = r[cFields[i]];
+      currentData[i][idx] = { x: ts, y: c };
+      if (c < cExtremes[i].min) cExtremes[i].min = c;
+      if (c > cExtremes[i].max) cExtremes[i].max = c;
     }
-    lastWasExporting = exporting;
 
-    vFields.forEach((f, i) => {
-      const v = r[f];
-      if (v < voltageExtremes[i].min) voltageExtremes[i].min = v;
-      if (v > voltageExtremes[i].max) voltageExtremes[i].max = v;
-    });
-    cFields.forEach((f, i) => {
-      const v = r[f];
-      if (v < currentExtremes[i].min) currentExtremes[i].min = v;
-      if (v > currentExtremes[i].max) currentExtremes[i].max = v;
-    });
-  });
+    const exporting = r.power_returned > r.power_delivered;
+    if (idx > 0 && exporting !== prevExporting) {
+      const id = `flip_${localFlipCount++}`;
+      newFlipAnnotations[id] = buildFlipAnnotationDescriptor(ts, exporting);
+    }
+    prevExporting = exporting;
+    lastExporting = exporting;
+  }
+
+  return {
+    powerData,
+    voltageData,
+    currentData,
+    voltageExtremes: vExtremes,
+    currentExtremes: cExtremes,
+    flipAnnotations:  newFlipAnnotations,
+    flipCount:        localFlipCount,
+    lastWasExporting: lastExporting,
+    hours,
+  };
+}
+
+/**
+ * Apply a pending history frame to all charts.
+ *
+ * This is the only place that mutates chart instances with history data.
+ * If pendingHistoryFrame is null (already consumed or not yet set) it
+ * returns immediately so it is safe to call unconditionally.
+ */
+function applyPendingFrame() {
+  if (!pendingHistoryFrame) return;
+  const frame = pendingHistoryFrame;
+  pendingHistoryFrame = null;
+
+  // Update module-level tracking state.
+  ema              = null;  // re-seed EMA from first live reading
+  lastWasExporting = frame.lastWasExporting;
+  flipCount        = frame.flipCount;
+
+  // Replace the global flip-annotation map.
+  Object.keys(flipAnnotations).forEach(k => delete flipAnnotations[k]);
+  Object.assign(flipAnnotations, frame.flipAnnotations);
+
+  // Reset all chart annotation stores and load the computed set.
+  powerChart.options.plugins.annotation.annotations    = { ...frame.flipAnnotations };
+  voltageCharts.forEach(c => { c.options.plugins.annotation.annotations = { ...frame.flipAnnotations }; });
+  currentCharts.forEach(c => { c.options.plugins.annotation.annotations = { ...frame.flipAnnotations }; });
+
+  // Swap dataset arrays (no per-point loop needed — arrays are prebuilt).
+  powerChart.data.datasets[0].data = frame.powerData;
+  frame.voltageData.forEach((d, i) => { voltageCharts[i].data.datasets[0].data = d; });
+  frame.currentData.forEach((d, i) => { currentCharts[i].data.datasets[0].data = d; });
+
+  // Copy precomputed extremes into the mutable per-phase objects.
+  frame.voltageExtremes.forEach((e, i) => { voltageExtremes[i].min = e.min; voltageExtremes[i].max = e.max; });
+  frame.currentExtremes.forEach((e, i) => { currentExtremes[i].min = e.min; currentExtremes[i].max = e.max; });
 
   voltageCharts.forEach((_, i) => updateVoltageAnnotation(i));
   syncChartScales(voltageCharts, voltageExtremes);
-  // minFloor=0 prevents the current Y axis from going negative.
   syncChartScales(currentCharts, currentExtremes, 0);
 
-  buildXAxisCache(hours);
+  buildXAxisCache(frame.hours);
   applyXAxisConfig();
 
   powerChart.update();
   voltageCharts.forEach(c => c.update());
   currentCharts.forEach(c => c.update());
-}
-
-/**
- * @param {object[]} data
- * @param {function} yFn
- * @returns {{x:number,y:number}[]}
- */
-function toXY(data, yFn) {
-  return data.map(r => ({ x: new Date(r.timestamp).getTime(), y: yFn(r) }));
 }
 
 /* ── Summary ────────────────────────────────────────────────────────────── */
@@ -1078,6 +1165,11 @@ function fmt1(v) {
 /* ── Chart append ───────────────────────────────────────────────────────── */
 
 function appendToCharts(r) {
+  // Apply any pending history frame before adding the live point.
+  // This ensures history data is installed atomically before live points
+  // are appended on top of it.
+  applyPendingFrame();
+
   const ts  = new Date(r.timestamp).getTime();
   const s   = smoothReading(r);  // EMA-smoothed copy for chart points
 
@@ -1360,16 +1452,20 @@ function updateInlineScale(chart, extremes, minPad) {
 /* ── Annotations ────────────────────────────────────────────────────────── */
 
 /**
- * Add a vertical flip marker at the given timestamp on ALL charts.
- * enter/leave callbacks show a fixed tooltip with the exact timestamp.
+ * Build a flip annotation descriptor without applying it to any chart.
+ *
+ * Pure function used by computeHistoryFrame() to build the full annotation
+ * set in one pass. The returned object can later be installed into chart
+ * annotation configs by applyPendingFrame().
+ *
  * @param {number}  tsMs     - Timestamp in milliseconds.
  * @param {boolean} toExport - Direction after the flip.
+ * @returns {object} Chart.js annotation descriptor.
  */
-function addFlipAnnotation(tsMs, toExport) {
-  const id    = `flip_${flipCount++}`;
+function buildFlipAnnotationDescriptor(tsMs, toExport) {
   const color = toExport ? "rgba(34,197,94,0.55)" : "rgba(59,130,246,0.55)";
   const label = toExport ? "→ Export" : "→ Import";
-  const annotation = {
+  return {
     type: "line", scaleID: "x", value: tsMs,
     borderColor: color, borderWidth: 1, borderDash: [4, 4],
     label: {
@@ -1393,6 +1489,21 @@ function addFlipAnnotation(tsMs, toExport) {
       document.getElementById("flip-tooltip").style.display = "none";
     },
   };
+}
+
+/**
+ * Build a flip annotation and immediately install it on all charts.
+ *
+ * Used by the live SSE path (appendToCharts) where annotations must be
+ * applied inline as readings arrive. For the history path, use
+ * buildFlipAnnotationDescriptor() and apply via applyPendingFrame().
+ *
+ * @param {number}  tsMs     - Timestamp in milliseconds.
+ * @param {boolean} toExport - Direction after the flip.
+ */
+function addFlipAnnotation(tsMs, toExport) {
+  const id         = `flip_${flipCount++}`;
+  const annotation = buildFlipAnnotationDescriptor(tsMs, toExport);
   flipAnnotations[id] = annotation;
   powerChart.options.plugins.annotation.annotations[id] = annotation;
   voltageCharts.forEach(c => { c.options.plugins.annotation.annotations[id] = annotation; });
