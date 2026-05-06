@@ -1379,12 +1379,20 @@ async function loadForecastChart() {
   [forecastElecChart, forecastGasChart, forecastTempChart, forecastSolarChart].forEach(setScale);
 
   if (forecastElecChart) {
+    const elecData = pricesElec.map(p => {
+      const loadedPE = (p.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
+      return { x: p.ts_start, y: loadedPE };
+    });
+    // Project the last known electricity price to the edge of the chart (+48h)
+    if (pricesElec.length > 0) {
+      const last = pricesElec[pricesElec.length - 1];
+      const loadedPE = (last.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
+      elecData.push({ x: Math.max(last.ts_end, maxMs), y: loadedPE });
+    }
+
     forecastElecChart.data.datasets = [{
       label: "Electricity Cost",
-      data: pricesElec.map(p => {
-        const loadedPE = (p.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
-        return { x: p.ts_start, y: loadedPE };
-      }),
+      data: elecData,
       borderColor: COLORS.delivered,
       backgroundColor: COLORS.delivered + "33",
       stepped: "after",
@@ -1399,10 +1407,11 @@ async function loadForecastChart() {
       const loadedPG = (p.price_eur_m3 + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
       gasData.push({ x: p.ts_start, y: loadedPG });
     });
+    // Project the last known gas price to the edge of the chart (+48h)
     if (validGas.length > 0) {
       const last = validGas[validGas.length - 1];
       const loadedPG = (last.price_eur_m3 + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
-      gasData.push({ x: last.ts_end, y: loadedPG });
+      gasData.push({ x: Math.max(last.ts_end, maxMs), y: loadedPG });
     }
     forecastGasChart.data.datasets = [{
       label: "Gas Cost",
