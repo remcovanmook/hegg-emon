@@ -34,9 +34,9 @@ class GasPriceFetcher:
 
     def _fetch(self) -> list:
         now = datetime.now(timezone.utc)
-        # Fetch today and tomorrow
-        from_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        till_date = (from_date + timedelta(days=2)).replace(microsecond=999000)
+        # Fetch the last 7 days through tomorrow to ensure we can backfill the history/usage tab
+        from_date = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+        till_date = (now + timedelta(days=2)).replace(microsecond=999000)
 
         params = urllib.parse.urlencode({
             "fromDate": from_date.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
