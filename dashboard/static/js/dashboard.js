@@ -1299,8 +1299,10 @@ function initForecastChart() {
     }
   });
 
+  const optsE = getOpts("€ / kWh", ctx => `€${ctx.raw.y.toFixed(3)}`, true);
+  optsE.scales.x.offset = true;
   const ctxE = document.getElementById("chart-forecast-elec");
-  if (ctxE) forecastElecChart = new Chart(ctxE, { type: "line", data: { datasets: [] }, options: getOpts("€ / kWh", ctx => `€${ctx.raw.y.toFixed(3)}`, true) });
+  if (ctxE) forecastElecChart = new Chart(ctxE, { type: "bar", data: { datasets: [] }, options: optsE });
 
   const ctxG = document.getElementById("chart-forecast-gas");
   if (ctxG) forecastGasChart = new Chart(ctxG, { type: "line", data: { datasets: [] }, options: getOpts("€ / m³", ctx => `€${ctx.raw.y.toFixed(3)}`, true) });
@@ -1383,20 +1385,33 @@ async function loadForecastChart() {
       const loadedPE = (p.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
       return { x: p.ts_start, y: loadedPE };
     });
-    // Project the last known electricity price to the edge of the chart (+48h)
+    // Project the last known electricity price hourly to the edge of the chart (+48h)
     if (pricesElec.length > 0) {
       const last = pricesElec[pricesElec.length - 1];
       const loadedPE = (last.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
-      elecData.push({ x: Math.max(last.ts_end, maxMs), y: loadedPE });
+      let nextTs = last.ts_end;
+      while (nextTs < maxMs) {
+        elecData.push({ x: nextTs, y: loadedPE });
+        nextTs += 3600000;
+      }
     }
+
+    const sortedPrices = elecData.map(d => d.y).sort((a,b) => a - b);
+    const p10 = sortedPrices[Math.max(0, Math.floor(sortedPrices.length * 0.1) - 1)] || 0;
+    const p90 = sortedPrices[Math.min(sortedPrices.length - 1, Math.floor(sortedPrices.length * 0.9))] || 0;
+
+    const bgColors = elecData.map(d => {
+      if (d.y >= p90) return "#3b82f6cc"; // Blue
+      if (d.y <= p10) return "#10b981cc"; // Green
+      return "#6b749088";                 // Neutral grey
+    });
 
     forecastElecChart.data.datasets = [{
       label: "Electricity Cost",
       data: elecData,
-      borderColor: COLORS.delivered,
-      backgroundColor: COLORS.delivered + "33",
-      stepped: "after",
-      fill: "origin"
+      backgroundColor: bgColors,
+      borderRadius: 3,
+      borderSkipped: false
     }];
     forecastElecChart.update();
   }
