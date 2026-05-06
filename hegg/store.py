@@ -430,8 +430,7 @@ class HeggStore:
 
         logger.info("Backfilling rollup tiers from legacy `readings` table")
         with self._write_lock:
-            try:
-                conn.execute("BEGIN")
+            with conn:
                 for table, bucket_ms, since_ms in plans:
                     sql = f"""
                         INSERT OR IGNORE INTO {table}
@@ -452,10 +451,6 @@ class HeggStore:
                     cur = conn.execute(sql, (since_ms,))
                     logger.info("  %s: %d rows", table, cur.rowcount)
                 conn.execute("PRAGMA user_version = 1")
-                conn.commit()
-            except sqlite3.Error:
-                conn.rollback()
-                raise
 
     def _warm_start(self) -> None:
         """Prefill the ring buffer from the most recent ``readings_10s`` rows.
@@ -511,6 +506,10 @@ class HeggStore:
                 self._last_1m_bucket = new_bucket
                 return
             if new_bucket <= self._last_1m_bucket:
+                # Handle massive backward clock jumps (e.g., > 1 hour)
+                if self._last_1m_bucket - new_bucket > 3600_000:
+                    logger.warning("Clock jumped backward significantly; resetting 1m bucket anchor.")
+                    self._last_1m_bucket = new_bucket
                 return
             self._flush_minutes(self._last_1m_bucket, new_bucket)
             self._last_1m_bucket = new_bucket
@@ -558,8 +557,7 @@ class HeggStore:
             rows_1m.append((minute_ts, serial, len(minute_samples), *m))
 
         conn = self._conn()
-        try:
-            conn.execute("BEGIN")
+        with conn:
             conn.executemany(
                 _ROLLUP_INSERT_TEMPLATE.format(table="readings_10s"),
                 rows_10s,
@@ -568,10 +566,6 @@ class HeggStore:
                 _ROLLUP_INSERT_TEMPLATE.format(table="readings_1m"),
                 rows_1m,
             )
-            conn.commit()
-        except sqlite3.Error:
-            conn.rollback()
-            raise
 
     # -- read path ----------------------------------------------------------
 
