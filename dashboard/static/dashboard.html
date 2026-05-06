@@ -386,9 +386,12 @@
               <span class="power-value mono cost-import" id="cost-net-total">—</span>
               <span class="power-unit">&euro;</span>
             </div>
-            <div class="power-card-deltas">
-              <span class="power-delta-in"  id="cost-delta-in"></span>
-              <span class="power-delta-out" id="cost-delta-out"></span>
+            <div style="display: flex; flex-direction: column; align-items: flex-end;">
+              <div class="power-card-deltas">
+                <span class="power-delta-in"  id="cost-delta-in"></span>
+                <span class="power-delta-out" id="cost-delta-out"></span>
+              </div>
+              <div id="cost-elec-breakdown" style="font-size: 0.7rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 4px;"></div>
             </div>
           </div>
           <div class="chart-wrapper chart-wrapper--cost">
@@ -424,6 +427,10 @@
               <span class="power-direction">Gas cost</span>
               <span class="power-value mono cost-import" id="cost-gas-total">—</span>
               <span class="power-unit">&euro;</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end;">
+              <div class="power-card-deltas" style="min-height: 0;"></div>
+              <div id="cost-gas-breakdown" style="font-size: 0.7rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 4px;"></div>
             </div>
           </div>
           <div class="chart-wrapper chart-wrapper--cost">

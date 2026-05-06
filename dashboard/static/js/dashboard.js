@@ -1239,12 +1239,24 @@ async function loadUsageCharts() {
   if (costDeltaIn)  costDeltaIn.textContent  = `↓ €${totalImport.toFixed(2)} / ${_label}`;
   if (costDeltaOut) costDeltaOut.textContent = `↑ €${totalExport.toFixed(2)} / ${_label}`;
 
+  const elecBrk = document.getElementById("cost-elec-breakdown");
+  if (elecBrk) {
+    const totalElecVat = (totalElecSpot + totalElecTaxFee) * (TARIFFS.vatMultiplier - 1);
+    elecBrk.textContent = `Energy: €${totalElecSpot.toFixed(2)} | Tax+Fee: €${totalElecTaxFee.toFixed(2)} | VAT: €${totalElecVat.toFixed(2)}`;
+  }
+
   // Gas totals.
   const totalGas = gas.reduce((a, b) => a + b, 0);
   setText("gas-total-val", totalGas.toFixed(3));
   
   const totalGasCost = gasCost.reduce((a, b) => a + b, 0);
   setText("cost-gas-total", totalGasCost.toFixed(2));
+
+  const gasBrk = document.getElementById("cost-gas-breakdown");
+  if (gasBrk) {
+    const totalGasVat = (totalGasSpot + totalGasTaxFee) * (TARIFFS.vatMultiplier - 1);
+    gasBrk.textContent = `Energy: €${totalGasSpot.toFixed(2)} | Tax+Fee: €${totalGasTaxFee.toFixed(2)} | VAT: €${totalGasVat.toFixed(2)}`;
+  }
 
 }
 
