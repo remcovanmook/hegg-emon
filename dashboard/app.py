@@ -45,7 +45,7 @@ from typing import Iterator, Optional
 
 from flask import Flask, Response, jsonify, make_response, send_from_directory, request
 
-from hegg.store import HeggStore, default_db_path
+from hegg.store import HeggStore, default_db_path, get_store
 
 logger = logging.getLogger(__name__)
 
@@ -276,7 +276,7 @@ def create_app(db_path: str = "") -> Flask:
         Configured :class:`flask.Flask` instance.
     """
     global _store
-    _store = HeggStore(path=db_path or default_db_path())
+    _store = get_store(db_path or default_db_path())
 
     threading.Thread(
         target=_prune_loop,

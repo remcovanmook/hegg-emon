@@ -96,7 +96,7 @@ def main() -> None:
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    from hegg.store import HeggStore
+    from hegg.store import get_store
     from hegg_collector import run as run_collector
     from dashboard.app import create_app
 
@@ -115,7 +115,7 @@ def main() -> None:
     # ── Prometheus exporter: polls SQLite ─────────────────────────────────────
     try:
         from hegg.prometheus_exporter import HeggExporter
-        store = HeggStore(path=db_path)
+        store = get_store(db_path)
         exporter = HeggExporter(metrics_port=args.prometheus_port)
         exporter.start_http_server()
         threading.Thread(
@@ -153,7 +153,7 @@ def main() -> None:
     # ── Price fetcher: pulls day-ahead prices once daily ──────────────────────
     if args.price_api_key:
         from hegg.price_fetcher import PriceFetcher
-        price_store = HeggStore(path=db_path)
+        price_store = get_store(db_path)
         PriceFetcher(store=price_store, api_key=args.price_api_key).start()
         logger.info("Price fetcher started (market_zone=NL, daily at 14:00 UTC)")
     else:

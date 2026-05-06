@@ -42,19 +42,56 @@ The single SQLite interface.  Everything else imports this.
 
 | Method | Description |
 |---|---|
-| `insert(reading)` | Write a 1-second reading |
+| `insert(reading)` | Append a 1-second reading to the ring buffer; flush if a minute closed |
 | `insert_summary(data)` | Write a minute-summary packet |
 | `insert_event(data)` | Write an unknown/raw packet |
-| `latest_reading()` | Most recent reading as `HeggReading`, or `None` |
+| `latest_reading()` | Most recent reading from the ring buffer, or `None` |
 | `latest_summary()` | Most recent summary as dict, or `{}` |
-| `query(since, bucket_seconds)` | Bucketed averages for the history API |
-| `query_raw_since(since_ms, limit)` | Raw rows for the SSE stream |
+| `query(since, bucket_seconds)` | Bucketed averages — tier dispatched by window length |
+| `query_raw_since(since_ms, limit)` | Live tail from the ring buffer (SSE stream) |
 | `summary_delta(hours)` | Cumulative energy/gas delta over a window |
 | `query_events(limit)` | Recent raw/unknown packets |
-| `prune()` | Delete rows older than the retention window |
+| `prune()` | Roll up closed hours into `readings_1h`; delete data past each tier's retention |
 
 Uses per-thread connections with WAL journal mode.  Schema is created on first
 use of each connection, making `":memory:"` safe for concurrent test isolation.
+
+#### Storage tiers
+
+The store is a tiered ring buffer + pre-aggregated SQLite tables.  The 1 Hz
+write hot-path lives entirely in RAM; disk writes fire only when an incoming
+sample crosses a one-minute boundary.
+
+| Tier | Source             | Resolution | Retention | Read window |
+|------|--------------------|------------|-----------|-------------|
+| 1    | in-memory deque    | 1 s        | 1 hour    | ≤ 1 hour    |
+| 2    | `readings_10s`     | 10 s       | 6 hours   | ≤ 6 hours   |
+| 3    | `readings_1m`      | 1 min      | 3 days    | ≤ 3 days    |
+| 4    | `readings_1h`      | 1 hour     | 1 year    | > 3 days    |
+
+Each insert appends to the ring buffer and tracks the last seen 1-minute
+bucket.  When a sample crosses a bucket boundary, every closed minute is
+flushed in a single transaction: 6 × `readings_10s` rows + 1 × `readings_1m`
+row.  All `ts` values are floored to the bucket width so `INSERT OR REPLACE`
+correctly updates an already-flushed bucket if late samples arrive.
+
+`prune()` rolls every closed hour's `readings_1m` rows into a single
+`readings_1h` row using a weighted mean (`SUM(mean*n) / SUM(n)`), then
+deletes data past each tier's retention.  No separate maintenance thread
+exists; the existing hourly prune timer drives both.
+
+`query()` dispatches by total window length and serves the entire window
+from one tier — a 90-minute query is served from `readings_10s` (10 s
+resolution end-to-end), not stitched across the ring buffer + 10s table.
+
+On startup the ring buffer is prefilled from the most recent `readings_10s`
+rows so `latest_reading()`, the SSE stream, and short-window history are
+non-empty before the first new packet arrives (at 10 s rather than 1 s
+resolution).
+
+**Crash durability:** up to one in-flight minute of 1 Hz samples lives only
+in RAM and is lost on an unclean shutdown.  Tier-2-and-up data is durable
+once flushed.
 
 ### `hegg_collector.py`
 
@@ -188,14 +225,35 @@ Prometheus poll loop (daemon thread, every 2 s)
 ## Database schema
 
 ```sql
-CREATE TABLE readings (
-    ts          INTEGER NOT NULL,   -- Unix ms
-    serial      TEXT    NOT NULL,
-    delivered   REAL    NOT NULL,   -- kW
-    returned    REAL    NOT NULL,   -- kW
-    voltage_l1  REAL, voltage_l2 REAL, voltage_l3 REAL,  -- V
-    current_l1  REAL, current_l2 REAL, current_l3 REAL,  -- A
+-- Pre-aggregated rollup tables.  Identical column shape — only the bucket
+-- width of `ts` differs.  `ts` is always floored to its bucket so
+-- INSERT OR REPLACE replaces in place if the bucket is re-flushed.
+-- `n` is the sample count and is required for weighted regrouping.
+CREATE TABLE readings_10s (
+    ts              INTEGER NOT NULL,
+    serial          TEXT    NOT NULL,
+    n               INTEGER NOT NULL,
+    delivered_mean  REAL    NOT NULL,   -- kW
+    returned_mean   REAL    NOT NULL,   -- kW
+    voltage_l1_mean REAL    NOT NULL,
+    voltage_l2_mean REAL    NOT NULL,
+    voltage_l3_mean REAL    NOT NULL,
+    current_l1_mean REAL    NOT NULL,
+    current_l2_mean REAL    NOT NULL,
+    current_l3_mean REAL    NOT NULL,
     UNIQUE (ts, serial)
+);
+-- Same shape for readings_1m and readings_1h.
+
+-- Legacy raw 1 Hz table.  No longer written.  Kept so existing
+-- databases on disk don't break; safe to DROP at any later point.
+CREATE TABLE readings (
+    ts          INTEGER NOT NULL,
+    serial      TEXT    NOT NULL,
+    delivered   REAL    NOT NULL,
+    returned    REAL    NOT NULL,
+    voltage_l1  REAL, voltage_l2 REAL, voltage_l3 REAL,
+    current_l1  REAL, current_l2 REAL, current_l3 REAL
 );
 
 CREATE TABLE summaries (
