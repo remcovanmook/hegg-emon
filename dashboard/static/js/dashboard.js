@@ -994,7 +994,7 @@ function setEnergyDelta(id, value, period, unit) {
 /* ── Tab switching ──────────────────────────────────────────────────────── */
 
 /** IDs of all tab panels and their corresponding button IDs. */
-const TAB_IDS = ["electricity", "usage"];
+const TAB_IDS = ["electricity", "usage", "forecast"];
 
 /**
  * Activate the named tab panel and deactivate all others.
@@ -1022,6 +1022,8 @@ function switchTab(tabId) {
     [usageChart, costChart, gasChart, gasCostChart].forEach(c => {
       if (c) { c.resize(); c.update("none"); }
     });
+  } else if (tabId === "forecast") {
+    if (forecastChart) { forecastChart.resize(); forecastChart.update("none"); }
   } else {
     [powerChart, ...voltageCharts, ...currentCharts].forEach(c => {
       if (c) { c.resize(); c.update("none"); }
