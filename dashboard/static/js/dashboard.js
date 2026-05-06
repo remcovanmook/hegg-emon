@@ -448,6 +448,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // by more than one step between rebuilds.
   setInterval(() => { buildXAxisCache(selectedHours); applyXAxisConfig(); }, 5 * 60_000);
 
+  // Trim data points and annotations that have scrolled out of the history
+  // window. Running every 60 s means at most 60 extra live points accumulate
+  // before the next prune — invisible on any history window — but avoids
+  // the per-second O(n) splice cost of trimming inline with the SSE tick.
+  setInterval(() => {
+    const cutoff = Date.now() - selectedHours * 3_600_000;
+    [powerChart, ...voltageCharts, ...currentCharts].forEach(c => trimOldPoints(c, cutoff));
+    trimOldAnnotations(cutoff);
+  }, 60_000);
+
   // Clock — updates every second.
   const tickClock = () => setText("header-time", new Date().toLocaleTimeString());
   tickClock();
@@ -1181,12 +1191,10 @@ function fmt1(v) {
 
 function appendToCharts(r) {
   // Apply any pending history frame before adding the live point.
-  // This ensures history data is installed atomically before live points
-  // are appended on top of it.
   applyPendingFrame();
 
-  const ts  = new Date(r.timestamp).getTime();
-  const s   = smoothReading(r);  // EMA-smoothed copy for chart points
+  const ts = new Date(r.timestamp).getTime();
+  const s  = smoothReading(r);  // EMA-smoothed copy for chart points
 
   powerChart.data.datasets[0].data.push({
     x: ts,
@@ -1201,35 +1209,31 @@ function appendToCharts(r) {
   lastWasExporting = exporting;
 
   // Voltage — smoothed for chart, raw for extremes tracking.
+  // syncChartScales (and niceScale) only runs when an extreme is breached;
+  // as long as the new reading is within the existing range the Y axis is
+  // unchanged and no scale recalculation is needed.
+  let vChanged = false;
   ["voltage_l1", "voltage_l2", "voltage_l3"].forEach((f, i) => {
     voltageCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
     const v = r[f];
-    if (v < voltageExtremes[i].min) { voltageExtremes[i].min = v; updateVoltageAnnotation(i); }
-    if (v > voltageExtremes[i].max) { voltageExtremes[i].max = v; updateVoltageAnnotation(i); }
+    if (v < voltageExtremes[i].min) { voltageExtremes[i].min = v; updateVoltageAnnotation(i); vChanged = true; }
+    if (v > voltageExtremes[i].max) { voltageExtremes[i].max = v; updateVoltageAnnotation(i); vChanged = true; }
   });
-  syncChartScales(voltageCharts, voltageExtremes);
+  if (vChanged) syncChartScales(voltageCharts, voltageExtremes);
 
-  // Current — smoothed for chart, raw for extremes.
+  // Current — same gating.
+  let cChanged = false;
   ["current_l1", "current_l2", "current_l3"].forEach((f, i) => {
     currentCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
     const v = r[f];
-    if (v < currentExtremes[i].min) currentExtremes[i].min = v;
-    if (v > currentExtremes[i].max) currentExtremes[i].max = v;
+    if (v < currentExtremes[i].min) { currentExtremes[i].min = v; cChanged = true; }
+    if (v > currentExtremes[i].max) { currentExtremes[i].max = v; cChanged = true; }
   });
-  // minFloor=0 prevents the current Y axis from going negative.
-  syncChartScales(currentCharts, currentExtremes, 0);
+  if (cChanged) syncChartScales(currentCharts, currentExtremes, 0);
 
-  const cutoff = Date.now() - selectedHours * 3600 * 1000;
-  trimOldPoints(powerChart, cutoff);
-  voltageCharts.forEach(c => trimOldPoints(c, cutoff));
-  currentCharts.forEach(c => trimOldPoints(c, cutoff));
-  trimOldAnnotations(cutoff);
-
-  // applyXAxisConfig is intentionally NOT called here.
-  // The axis min is slid forward by a setInterval in DOMContentLoaded
-  // (once per minute), and by loadHistory/range-change events.
-  // Calling it every second creates a new afterBuildTicks closure per chart
-  // per tick and was the primary source of CPU load.
+  // Trimming is handled by a separate interval (see DOMContentLoaded).
+  // Doing it here every second with Array.shift() on large arrays is O(n)
+  // per tick and was a primary source of CPU load in long-running sessions.
 
   // Only repaint charts that are currently visible.
   if (!powerChart.canvas.closest("[hidden]")) {
@@ -1271,9 +1275,22 @@ function smoothReading(r) {
  * @param {import('chart.js').Chart} chart
  * @param {number} cutoff - Timestamp in milliseconds; points before this are dropped.
  */
+/**
+ * Remove data points older than cutoff from all datasets on a chart.
+ *
+ * Uses a single splice(0, n) rather than repeated shift() calls.
+ * shift() on a large array is O(n) per call; splice(0, n) is O(n) once
+ * for the same number of removals, so batching eliminates the quadratic
+ * behaviour that accumulates in long-running sessions.
+ *
+ * @param {import('chart.js').Chart} chart
+ * @param {number} cutoff - Epoch ms; points with x < cutoff are removed.
+ */
 function trimOldPoints(chart, cutoff) {
   for (const ds of chart.data.datasets) {
-    while (ds.data.length > 0 && ds.data[0].x < cutoff) ds.data.shift();
+    let n = 0;
+    while (n < ds.data.length && ds.data[n].x < cutoff) n++;
+    if (n > 0) ds.data.splice(0, n);
   }
 }
 
