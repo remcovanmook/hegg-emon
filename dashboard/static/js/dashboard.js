@@ -44,6 +44,14 @@ function chartPalette() {
 let COLORS = chartPalette();
 
 /**
+ * Cached CSS custom-property values used by the wye canvas draw functions.
+ * Updated by recolorCharts() whenever the theme changes so the per-second
+ * draw path never needs to call getComputedStyle itself.
+ * @type {object}
+ */
+let WYE_CSS = {};
+
+/**
  * X-axis tick configuration per history window.
  * unit + stepSize are passed directly to Chart.js time scale.
  * Chart.js aligns generated ticks to clean multiples of stepSize.
@@ -281,6 +289,20 @@ function recolorCharts() {
   const tipTtl  = v("--chart-tooltip-title");
   const tipBdy  = v("--chart-tooltip-body");
 
+  // Refresh the wye CSS cache so canvas draws don't need getComputedStyle.
+  WYE_CSS = {
+    cl1:     v("--phase-l1"),
+    cl2:     v("--phase-l2"),
+    cl3:     v("--phase-l3"),
+    cl12:    v("--wye-l12"),
+    cl13:    v("--wye-l13"),
+    cl23:    v("--wye-l23"),
+    neutral: v("--wye-neutral"),
+    grid:    grid,
+    text:    tick,
+    dim:     v("--text-dim"),
+  };
+
   // Refresh the mutable palette so newly-pushed data points use updated colours.
   Object.assign(COLORS, chartPalette());
 
@@ -381,6 +403,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Usage & cost charts: load on startup, refresh once per hour.
   loadUsageCharts();
   setInterval(loadUsageCharts, 60 * 60_000);
+
+  // Slide the X-axis min forward once per minute so the live edge stays
+  // current without rebuilding axis config on every SSE tick.
+  setInterval(() => applyXAxisConfig(selectedHours), 60_000);
 
   // Clock — updates every second.
   const tickClock = () => setText("header-time", new Date().toLocaleTimeString());
@@ -984,13 +1010,22 @@ function applyReading(r) {
   appendToCharts(r);
 }
 
-/** @param {HTMLElement} elem @param {string|number} val */
+/**
+ * Update an element's text and re-trigger the value-updated CSS animation.
+ *
+ * The animation is reset by removing the class, letting the browser paint
+ * the removal in one rAF, then re-adding it in the next.  This avoids the
+ * forced synchronous layout (getBoundingClientRect) that was previously
+ * needed to flush the style change.
+ *
+ * @param {HTMLElement} elem
+ * @param {string|number} val
+ */
 function setValue(elem, val) {
   if (!elem) return;
   elem.textContent = String(val);
   elem.classList.remove("value-updated");
-  elem.getBoundingClientRect(); // force reflow to re-trigger the CSS animation
-  elem.classList.add("value-updated");
+  requestAnimationFrame(() => elem.classList.add("value-updated"));
 }
 
 function setText(id, val) {
@@ -1044,9 +1079,13 @@ function appendToCharts(r) {
   trimOldPoints(powerChart, cutoff);
   voltageCharts.forEach(c => trimOldPoints(c, cutoff));
   currentCharts.forEach(c => trimOldPoints(c, cutoff));
+  trimOldAnnotations(cutoff);
 
-  // Slide the X window forward so ticks stay aligned to clock boundaries.
-  applyXAxisConfig(selectedHours);
+  // applyXAxisConfig is intentionally NOT called here.
+  // The axis min is slid forward by a setInterval in DOMContentLoaded
+  // (once per minute), and by loadHistory/range-change events.
+  // Calling it every second creates a new afterBuildTicks closure per chart
+  // per tick and was the primary source of CPU load.
 
   powerChart.update("none");
   voltageCharts.forEach(c => c.update("none"));
@@ -1080,10 +1119,44 @@ function smoothReading(r) {
   return s;
 }
 
+/**
+ * Remove data points older than cutoff from a chart's datasets.
+ * @param {import('chart.js').Chart} chart
+ * @param {number} cutoff - Timestamp in milliseconds; points before this are dropped.
+ */
 function trimOldPoints(chart, cutoff) {
   for (const ds of chart.data.datasets) {
     while (ds.data.length > 0 && ds.data[0].x < cutoff) ds.data.shift();
   }
+}
+
+/**
+ * Remove flip annotations whose timestamp has scrolled out of the history
+ * window.  Without pruning, the annotation object grows for the lifetime of
+ * the page and gets spread into every chart's config on each direction change.
+ *
+ * @param {number} cutoff - Timestamp in milliseconds; annotations before this are dropped.
+ */
+function trimOldAnnotations(cutoff) {
+  let changed = false;
+  for (const id of Object.keys(flipAnnotations)) {
+    // Annotation IDs are "flip_N"; the timestamp is stored on the value field.
+    if (flipAnnotations[id].value < cutoff) {
+      delete flipAnnotations[id];
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  // Sync the pruned set back to every chart that holds these annotations.
+  const removeFromChart = chart => {
+    const anns = chart.options.plugins.annotation.annotations;
+    for (const id of Object.keys(anns)) {
+      if (id.startsWith("flip_") && !flipAnnotations[id]) delete anns[id];
+    }
+  };
+  removeFromChart(powerChart);
+  voltageCharts.forEach(removeFromChart);
+  currentCharts.forEach(removeFromChart);
 }
 
 /* ── Scale helpers ──────────────────────────────────────────────────────── */
@@ -1434,20 +1507,18 @@ function drawWyeDiagram(v1, v2, v3) {
   const maxV  = Math.max(v1, v2, v3, 1);
   const scale = (Math.min(W, H) * 0.4) / maxV;
 
-  // Pull CSS custom-property colours for theme consistency.
-  const css   = getComputedStyle(document.documentElement);
-  const cprop = name => css.getPropertyValue(name).trim();
-
-  const cl1      = cprop("--phase-l1");
-  const cl2      = cprop("--phase-l2");
-  const cl3      = cprop("--phase-l3");
-  const cl12     = cprop("--wye-l12");
-  const cl13     = cprop("--wye-l13");
-  const cl23     = cprop("--wye-l23");
-  const cNeutral = cprop("--wye-neutral");
-  const cGrid    = cprop("--chart-grid");
-  const cText    = cprop("--text-muted");
-  const cTextDim = cprop("--text-dim");
+  // Use the cached palette populated by recolorCharts() rather than calling
+  // getComputedStyle on every tick (called once per second from SSE).
+  const cl1      = WYE_CSS.cl1     || "#60a5fa";
+  const cl2      = WYE_CSS.cl2     || "#34d399";
+  const cl3      = WYE_CSS.cl3     || "#f59e0b";
+  const cl12     = WYE_CSS.cl12    || "#818cf8";
+  const cl13     = WYE_CSS.cl13    || "#fb7185";
+  const cl23     = WYE_CSS.cl23    || "#a78bfa";
+  const cNeutral = WYE_CSS.neutral || "#f472b6";
+  const cGrid    = WYE_CSS.grid    || "rgba(255,255,255,0.06)";
+  const cText    = WYE_CSS.text    || "#9ca3af";
+  const cTextDim = WYE_CSS.dim     || "#4b5563";
 
   const ctx = wyeCtx;
   ctx.clearRect(0, 0, W, H);
@@ -1755,15 +1826,14 @@ function drawNeutralMini(re, im, mag) {
   const cx  = W / 2;
   const cy  = H / 2;
 
-  const css    = getComputedStyle(document.documentElement);
-  const cprop  = name => css.getPropertyValue(name).trim();
-  const cN     = cprop("--wye-neutral");
-  const cGrid  = cprop("--chart-grid");
-  const cText  = cprop("--text-muted");
-  const cDim   = cprop("--text-dim");
-  const cl1    = cprop("--phase-l1");
-  const cl2    = cprop("--phase-l2");
-  const cl3    = cprop("--phase-l3");
+  // Use the cached palette populated by recolorCharts() — same as drawWyeDiagram.
+  const cN    = WYE_CSS.neutral || "#f472b6";
+  const cGrid = WYE_CSS.grid    || "rgba(255,255,255,0.06)";
+  const cText = WYE_CSS.text    || "#9ca3af";
+  const cDim  = WYE_CSS.dim     || "#4b5563";
+  const cl1   = WYE_CSS.cl1     || "#60a5fa";
+  const cl2   = WYE_CSS.cl2     || "#34d399";
+  const cl3   = WYE_CSS.cl3     || "#f59e0b";
 
   const ctx = neutralCtx;
   ctx.clearRect(0, 0, W, H);
