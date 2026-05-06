@@ -1718,12 +1718,12 @@ function drawWyeDiagram(v1, v2, v3) {
   const IEC_NOM_DISP  = 230 - WYE_DISPLAY_OFFSET;   // 30 V display
   const IEC_HIGH_DISP = 253 - WYE_DISPLAY_OFFSET;   // 53 V display
 
-  // Pin the scale to IEC_HIGH_DISP so it is constant between repaints.
-  // A variable scale (based on the current max display voltage) causes the
-  // whole diagram to rescale as voltages fluctuate, producing visible wobble.
-  // The 0.38 factor leaves ~12 % canvas headroom beyond the high ring so
-  // tip labels do not clip when voltage approaches the upper tolerance band.
-  const scale = (Math.min(W, H) * 0.38) / IEC_HIGH_DISP;
+  // Pin the scale to a fixed ceiling above the IEC upper band so rings sit
+  // clearly inside the canvas with room to spare. Using IEC_HIGH_DISP (53)
+  // as the divisor would place the high ring right at the layout boundary;
+  // a ceiling of 265 V (65 display units) leaves ~18 % headroom beyond it.
+  const SCALE_CEIL = 265 - WYE_DISPLAY_OFFSET;   // 65 display V
+  const scale = (Math.min(W, H) * 0.38) / SCALE_CEIL;
 
   // Use the cached palette populated by recolorCharts() rather than calling
   // getComputedStyle on every tick (called once per second from SSE).
@@ -1773,7 +1773,7 @@ function drawWyeDiagram(v1, v2, v3) {
 
   // Spokes at 0°, 60°, 120°… (every 60°) as orientation guides.
   for (let a = 0; a < 360; a += 60) {
-    const sp = toXY(IEC_HIGH_DISP * 1.1, a);
+    const sp = toXY(SCALE_CEIL, a);
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(sp.x, sp.y);
