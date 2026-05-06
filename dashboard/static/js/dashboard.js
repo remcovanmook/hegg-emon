@@ -72,6 +72,11 @@ const BASE_OPTS = {
   responsive: true,
   maintainAspectRatio: false,
   animation: false,
+  // In Chart.js 4, animation:false only disables the 'default' transition.
+  // Hover events trigger update('active') which has its own 400 ms transition
+  // by default. With slow render intervals, this animates from a stale state
+  // and makes the data line appear to vanish until the transition completes.
+  transitions: { active: { animation: { duration: 0 } } },
   interaction: { mode: "index", intersect: false },
   elements: {
     point: { radius: 0, hitRadius: 6 },
@@ -131,6 +136,7 @@ function makeInlineOpts(tickFmt, unit = "") {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
+    transitions: { active: { animation: { duration: 0 } } },
     // index mode so the crosshair snaps to the nearest X position.
     interaction: { mode: "index", intersect: false },
     elements: {
@@ -952,6 +958,7 @@ function _barOpts(yLabel, tickFmt, tooltipFmt, stacked = false) {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
+    transitions: { active: { animation: { duration: 0 } } },
     interaction: { mode: "index", intersect: false },
     scales: {
       x: {
