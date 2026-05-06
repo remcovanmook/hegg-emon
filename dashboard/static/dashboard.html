@@ -445,35 +445,57 @@
     <div id="tab-forecast" role="tabpanel" aria-labelledby="tab-btn-forecast" hidden>
       <section class="section" aria-labelledby="forecast-heading">
         <h2 id="forecast-heading" class="section-title">Day-Ahead Outlook</h2>
-        <div class="cards-row cards-row--two" style="display: grid; grid-template-columns: 1fr; gap: 24px;">
-          <!-- Pricing Chart -->
+        <div class="cards-row cards-row--two" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px;">
           <div class="chart-card" style="margin-top: 0;">
             <div class="power-card-header">
               <div class="power-card-headline">
-                <span class="power-direction">Energy Pricing</span>
+                <span class="power-direction">Electricity</span>
               </div>
-              <div class="power-card-deltas" style="gap: 16px;">
+              <div class="power-card-deltas">
                 <span style="color: var(--delivered-color)" id="current-elec-price">—</span>
-                <span style="color: var(--returned-color)" id="current-gas-price">—</span>
               </div>
             </div>
-            <div class="chart-wrapper" style="height: 280px;">
-              <canvas id="chart-forecast-prices" aria-label="Forecasted electricity and gas prices"></canvas>
+            <div class="chart-wrapper" style="height: 200px;">
+              <canvas id="chart-forecast-elec" aria-label="Forecasted electricity prices"></canvas>
             </div>
           </div>
 
-          <!-- Weather Chart -->
           <div class="chart-card" style="margin-top: 0;">
             <div class="power-card-header">
               <div class="power-card-headline">
-                <span class="power-direction">Weather Forecast</span>
+                <span class="power-direction">Gas</span>
               </div>
-              <div class="power-card-deltas" style="gap: 16px;">
+              <div class="power-card-deltas">
+                <span style="color: var(--returned-color)" id="current-gas-price">—</span>
+              </div>
+            </div>
+            <div class="chart-wrapper" style="height: 200px;">
+              <canvas id="chart-forecast-gas" aria-label="Forecasted gas prices"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-card" style="margin-top: 0;">
+            <div class="power-card-header">
+              <div class="power-card-headline">
+                <span class="power-direction">Temperature</span>
+              </div>
+              <div class="power-card-deltas">
                 <span style="color: var(--voltage-color, #8b5cf6)" id="current-temp">—</span>
               </div>
             </div>
-            <div class="chart-wrapper" style="height: 280px;">
-              <canvas id="chart-forecast-weather" aria-label="Weather and solar forecast"></canvas>
+            <div class="chart-wrapper" style="height: 200px;">
+              <canvas id="chart-forecast-temp" aria-label="Temperature forecast"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-card" style="margin-top: 0;">
+            <div class="power-card-header">
+              <div class="power-card-headline">
+                <span class="power-direction">Solar Radiation</span>
+              </div>
+            </div>
+            <div class="chart-wrapper" style="height: 200px;">
+              <canvas id="chart-forecast-solar" aria-label="Solar forecast"></canvas>
             </div>
           </div>
         </div>
