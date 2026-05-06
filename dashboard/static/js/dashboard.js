@@ -236,6 +236,24 @@ let selectedHours     = 24;
 let latestVoltages = null;
 
 /**
+ * Staging buffers for live data between render intervals.
+ *
+ * appendToCharts() pushes incoming SSE points here rather than directly into
+ * chart.data. Chart.js caches pixel-position meta during update() calls; if
+ * data is pushed to chart.data without a corresponding update(), the meta
+ * becomes stale. When Chart.js renders on hover it uses the stale meta, so
+ * un-rendered points appear missing (data blinks out until the next update).
+ *
+ * Draining into chart.data immediately before each update() keeps meta and
+ * data always in sync regardless of how long the render interval is.
+ */
+const pendingLive = {
+  power:   [],
+  voltage: [[], [], []],
+  current: [[], [], []],
+};
+
+/**
  * Cached X-axis configuration for the electricity tab charts.
  * Built by buildXAxisCache() on range change and every 5 minutes.
  * Null until the first call; applyXAxisConfig() is a no-op while null.
@@ -477,6 +495,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // Canvas redraws are the primary paint cost; reducing from 1 Hz to 0.2 Hz
   // cuts that cost by 5x with no perceptible change on any history window.
   setInterval(() => {
+    // Drain staged live data into chart instances before updating meta.
+    // This ensures chart.data and the pixel-position meta computed by
+    // update() are always in sync, so hover renders never see stale data.
+    if (pendingLive.power.length) {
+      powerChart.data.datasets[0].data.push(...pendingLive.power);
+      pendingLive.power.length = 0;
+    }
+    pendingLive.voltage.forEach((buf, i) => {
+      if (buf.length) { voltageCharts[i].data.datasets[0].data.push(...buf); buf.length = 0; }
+    });
+    pendingLive.current.forEach((buf, i) => {
+      if (buf.length) { currentCharts[i].data.datasets[0].data.push(...buf); buf.length = 0; }
+    });
+
     if (latestVoltages) {
       updateWyeDiagram(latestVoltages.v1, latestVoltages.v2, latestVoltages.v3);
     }
@@ -1227,7 +1259,9 @@ function appendToCharts(r) {
   const ts = new Date(r.timestamp).getTime();
   const s  = smoothReading(r);  // EMA-smoothed copy for chart points
 
-  powerChart.data.datasets[0].data.push({
+  // Stage into pendingLive; data is drained into chart instances at render
+  // time so chart meta stays in sync with rendered data.
+  pendingLive.power.push({
     x: ts,
     y: Math.round((s.power_delivered - s.power_returned) * 1000),
   });
@@ -1240,12 +1274,10 @@ function appendToCharts(r) {
   lastWasExporting = exporting;
 
   // Voltage — smoothed for chart, raw for extremes tracking.
-  // syncChartScales (and niceScale) only runs when an extreme is breached;
-  // as long as the new reading is within the existing range the Y axis is
-  // unchanged and no scale recalculation is needed.
+  // syncChartScales only runs when an extreme is breached.
   let vChanged = false;
   ["voltage_l1", "voltage_l2", "voltage_l3"].forEach((f, i) => {
-    voltageCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
+    pendingLive.voltage[i].push({ x: ts, y: s[f] });
     const v = r[f];
     if (v < voltageExtremes[i].min) { voltageExtremes[i].min = v; updateVoltageAnnotation(i); vChanged = true; }
     if (v > voltageExtremes[i].max) { voltageExtremes[i].max = v; updateVoltageAnnotation(i); vChanged = true; }
@@ -1255,7 +1287,7 @@ function appendToCharts(r) {
   // Current — same gating.
   let cChanged = false;
   ["current_l1", "current_l2", "current_l3"].forEach((f, i) => {
-    currentCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
+    pendingLive.current[i].push({ x: ts, y: s[f] });
     const v = r[f];
     if (v < currentExtremes[i].min) { currentExtremes[i].min = v; cChanged = true; }
     if (v > currentExtremes[i].max) { currentExtremes[i].max = v; cChanged = true; }
