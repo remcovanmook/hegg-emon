@@ -1544,7 +1544,7 @@ function updateVoltageAnnotation(phaseIndex) {
       type: "line", scaleID: "y", value: min,
       borderColor: "rgba(239,68,68,0.7)", borderWidth: 1, borderDash: [4, 3],
       label: {
-        display: true, content: `${min.toFixed(1)} V`, position: "end",
+        display: true, content: `${min.toFixed(1)} V`, position: "center",
         backgroundColor: "rgba(239,68,68,0.8)", color: "#fff",
         font: { size: 8, weight: "600" }, padding: { x: 3, y: 1 },
       },
@@ -1553,7 +1553,7 @@ function updateVoltageAnnotation(phaseIndex) {
       type: "line", scaleID: "y", value: max,
       borderColor: "rgba(59,130,246,0.7)", borderWidth: 1, borderDash: [4, 3],
       label: {
-        display: true, content: `${max.toFixed(1)} V`, position: "end",
+        display: true, content: `${max.toFixed(1)} V`, position: "center",
         backgroundColor: "rgba(59,130,246,0.8)", color: "#fff",
         font: { size: 8, weight: "600" }, padding: { x: 3, y: 1 },
       },
