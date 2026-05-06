@@ -1275,6 +1275,9 @@ function initForecastChart() {
     maintainAspectRatio: false,
     animation: false,
     interaction: { mode: "index", intersect: false },
+    elements: {
+      point: { radius: 0, hitRadius: 10, hoverRadius: 4 }
+    },
     plugins: {
       legend: { display: false },
       tooltip: { callbacks: { label: tooltipCb } }
