@@ -1712,9 +1712,18 @@ function drawWyeDiagram(v1, v2, v3) {
   const dv2 = Math.max(v2 - WYE_DISPLAY_OFFSET, 1);
   const dv3 = Math.max(v3 - WYE_DISPLAY_OFFSET, 1);
 
-  // Scale so the largest display vector occupies 80 % of the half-dimension.
-  const maxDV = Math.max(dv1, dv2, dv3);
-  const scale = (Math.min(W, H) * 0.4) / maxDV;
+  // IEC 61000-3-3 / EN 50160 tolerance band display values.
+  // Defined here so the scale can be pinned to IEC_HIGH_DISP.
+  const IEC_LOW_DISP  = 207 - WYE_DISPLAY_OFFSET;   //  7 V display
+  const IEC_NOM_DISP  = 230 - WYE_DISPLAY_OFFSET;   // 30 V display
+  const IEC_HIGH_DISP = 253 - WYE_DISPLAY_OFFSET;   // 53 V display
+
+  // Pin the scale to IEC_HIGH_DISP so it is constant between repaints.
+  // A variable scale (based on the current max display voltage) causes the
+  // whole diagram to rescale as voltages fluctuate, producing visible wobble.
+  // The 0.38 factor leaves ~12 % canvas headroom beyond the high ring so
+  // tip labels do not clip when voltage approaches the upper tolerance band.
+  const scale = (Math.min(W, H) * 0.38) / IEC_HIGH_DISP;
 
   // Use the cached palette populated by recolorCharts() rather than calling
   // getComputedStyle on every tick (called once per second from SSE).
@@ -1764,7 +1773,7 @@ function drawWyeDiagram(v1, v2, v3) {
 
   // Spokes at 0°, 60°, 120°… (every 60°) as orientation guides.
   for (let a = 0; a < 360; a += 60) {
-    const sp = toXY(maxDV * 1.05, a);
+    const sp = toXY(IEC_HIGH_DISP * 1.1, a);
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(sp.x, sp.y);
@@ -1773,13 +1782,7 @@ function drawWyeDiagram(v1, v2, v3) {
     ctx.stroke();
   }
 
-  // ── IEC 61000-3-3 / EN 50160 reference rings ──
-  // Nominal LV supply voltage in Europe: 230 V ±10 % (207 V – 253 V).
-  // Subtract the display offset so the rings align with the phasor tips.
-  const IEC_LOW_DISP  = 207 - WYE_DISPLAY_OFFSET;   //  7 V display
-  const IEC_NOM_DISP  = 230 - WYE_DISPLAY_OFFSET;   // 30 V display
-  const IEC_HIGH_DISP = 253 - WYE_DISPLAY_OFFSET;   // 53 V display
-
+  // ── IEC reference rings ──
   const drawIecRing = (dispV, color, dash, label, labelAngle) => {
     const r = dispV * scale;
     ctx.beginPath();
