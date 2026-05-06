@@ -217,9 +217,17 @@ const currentExtremes = [
   { min: Infinity, max: -Infinity },
 ];
 
-let lastWasExporting = null;
-let flipCount = 0;
-let selectedHours = 24;
+let lastWasExporting  = null;
+let flipCount         = 0;
+let selectedHours     = 24;
+
+/**
+ * Latest raw phase voltages from the most recent SSE reading.
+ * Written every 1 Hz in applyReading; read by the 5-second render interval
+ * to redraw the wye diagram without coupling the canvas repaint to the data tick.
+ * @type {{v1:number, v2:number, v3:number}|null}
+ */
+let latestVoltages = null;
 
 /**
  * Cached X-axis configuration for the electricity tab charts.
@@ -458,18 +466,20 @@ document.addEventListener("DOMContentLoaded", () => {
     trimOldAnnotations(cutoff);
   }, 60_000);
 
-  // Render electricity charts at 2-second intervals.
-  // Data continues to accumulate in chart arrays at 1 Hz; only the canvas
-  // repaint is throttled. Each repaint redraws all data points via the 2D
-  // canvas API — at 1 Hz on a 24-hour dataset this was 90 %+ of main-thread
-  // time. DOM number displays and the wye diagram remain at 1 Hz.
+  // Render electricity charts and the wye diagram every 5 seconds.
+  // Live DOM numbers (power, voltages, currents) remain at 1 Hz.
+  // Canvas redraws are the primary paint cost; reducing from 1 Hz to 0.2 Hz
+  // cuts that cost by 5x with no perceptible change on any history window.
   setInterval(() => {
+    if (latestVoltages) {
+      updateWyeDiagram(latestVoltages.v1, latestVoltages.v2, latestVoltages.v3);
+    }
     if (!powerChart.canvas.closest("[hidden]")) {
       powerChart.update("none");
       voltageCharts.forEach(c => c.update("none"));
       currentCharts.forEach(c => c.update("none"));
     }
-  }, 2000);
+  }, 5000);
 
   // Clock — updates every second.
   const tickClock = () => setText("header-time", new Date().toLocaleTimeString());
@@ -1162,12 +1172,13 @@ function applyReading(r) {
   setValue(el.currentL2, fmt1(r.current_l2));
   setValue(el.currentL3, fmt1(r.current_l3));
 
-  // Update the wye phasor diagram with the raw (un-smoothed) voltages.
-  updateWyeDiagram(
-    r.voltage_l1 ?? 0,
-    r.voltage_l2 ?? 0,
-    r.voltage_l3 ?? 0,
-  );
+  // Cache raw voltages for the wye diagram; the canvas is redrawn by the
+  // 5-second render interval rather than on every SSE tick.
+  latestVoltages = {
+    v1: r.voltage_l1 ?? 0,
+    v2: r.voltage_l2 ?? 0,
+    v3: r.voltage_l3 ?? 0,
+  };
 
   appendToCharts(r);
 }
