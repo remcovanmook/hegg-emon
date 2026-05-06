@@ -1696,9 +1696,25 @@ function drawWyeDiagram(v1, v2, v3) {
   const cx   = W / 2;
   const cy   = H / 2;
 
-  // Scale so the largest phase vector occupies 80 % of the half-dimension.
-  const maxV  = Math.max(v1, v2, v3, 1);
-  const scale = (Math.min(W, H) * 0.4) / maxV;
+  // Subtract a base voltage so inter-phase differences are amplified visually.
+  // At ~230 V the raw vectors are nearly identical in length; with a 200 V base
+  // the displayed deviations are ~30 V, making a 1 V imbalance ~3 % of the
+  // vector length instead of ~0.4 %.
+  // IEC reference rings and the mean ring use the same offset so they remain
+  // correctly positioned relative to the phasor tips.
+  // Neutral shift is mathematically unaffected (the base cancels in the centroid
+  // calculation) but appears proportionally larger at the expanded scale.
+  const WYE_DISPLAY_OFFSET = 200;
+
+  // Display magnitudes — deviations from the base, floor at 1 to avoid
+  // zero-length vectors if voltage ever dips below the base.
+  const dv1 = Math.max(v1 - WYE_DISPLAY_OFFSET, 1);
+  const dv2 = Math.max(v2 - WYE_DISPLAY_OFFSET, 1);
+  const dv3 = Math.max(v3 - WYE_DISPLAY_OFFSET, 1);
+
+  // Scale so the largest display vector occupies 80 % of the half-dimension.
+  const maxDV = Math.max(dv1, dv2, dv3);
+  const scale = (Math.min(W, H) * 0.4) / maxDV;
 
   // Use the cached palette populated by recolorCharts() rather than calling
   // getComputedStyle on every tick (called once per second from SSE).
@@ -1726,17 +1742,17 @@ function drawWyeDiagram(v1, v2, v3) {
     };
   };
 
-  // Phasor tip coordinates.
+  // Phasor tip coordinates use display magnitudes; labels show actual voltages.
   // L1 points straight up (90°), with L2 and L3 at −120° increments:
   //   L1 = 90°, L2 = −30° (lower-right), L3 = 210° (lower-left).
-  const p1 = toXY(v1,  90);
-  const p2 = toXY(v2, -30);
-  const p3 = toXY(v3, 210);
+  const p1 = toXY(dv1,  90);
+  const p2 = toXY(dv2, -30);
+  const p3 = toXY(dv3, 210);
 
-  const meanV   = (v1 + v2 + v3) / 3;
-  const idealR  = meanV * scale;
+  const meanDV = (dv1 + dv2 + dv3) / 3;
+  const idealR = meanDV * scale;
 
-  // ── Background grid rings (25 %, 50 %, 75 %, 100 % of ideal) ──
+  // ── Background grid rings (25 %, 50 %, 75 %, 100 % of display mean) ──
   for (let frac = 0.25; frac <= 1.01; frac += 0.25) {
     ctx.beginPath();
     ctx.arc(cx, cy, idealR * frac, 0, 2 * Math.PI);
@@ -1748,7 +1764,7 @@ function drawWyeDiagram(v1, v2, v3) {
 
   // Spokes at 0°, 60°, 120°… (every 60°) as orientation guides.
   for (let a = 0; a < 360; a += 60) {
-    const sp = toXY(maxV * 1.05, a);
+    const sp = toXY(maxDV * 1.05, a);
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(sp.x, sp.y);
@@ -1759,14 +1775,13 @@ function drawWyeDiagram(v1, v2, v3) {
 
   // ── IEC 61000-3-3 / EN 50160 reference rings ──
   // Nominal LV supply voltage in Europe: 230 V ±10 % (207 V – 253 V).
-  // These rings are drawn at fixed voltages regardless of the measured mean,
-  // so they provide a stable absolute reference on the diagram.
-  const IEC_NOM   = 230;
-  const IEC_LOW   = 207;   // 230 V − 10 %
-  const IEC_HIGH  = 253;   // 230 V + 10 %
+  // Subtract the display offset so the rings align with the phasor tips.
+  const IEC_LOW_DISP  = 207 - WYE_DISPLAY_OFFSET;   //  7 V display
+  const IEC_NOM_DISP  = 230 - WYE_DISPLAY_OFFSET;   // 30 V display
+  const IEC_HIGH_DISP = 253 - WYE_DISPLAY_OFFSET;   // 53 V display
 
-  const drawIecRing = (voltage, color, dash, label, labelAngle) => {
-    const r = voltage * scale;
+  const drawIecRing = (dispV, color, dash, label, labelAngle) => {
+    const r = dispV * scale;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, 2 * Math.PI);
     ctx.strokeStyle = color;
@@ -1785,10 +1800,10 @@ function drawWyeDiagram(v1, v2, v3) {
   };
 
   // Tolerance bands first (underneath nominal ring).
-  drawIecRing(IEC_LOW,  "rgba(251,146,60,0.55)",  [3, 3], "−10 %",  Math.PI * 0.25);
-  drawIecRing(IEC_HIGH, "rgba(251,146,60,0.55)",  [3, 3], "+10 %",  Math.PI * 0.25);
+  drawIecRing(IEC_LOW_DISP,  "rgba(251,146,60,0.55)",  [3, 3], "207 V",  Math.PI * 0.25);
+  drawIecRing(IEC_HIGH_DISP, "rgba(251,146,60,0.55)",  [3, 3], "253 V",  Math.PI * 0.25);
   // Nominal ring.
-  drawIecRing(IEC_NOM,  "rgba(255,255,255,0.30)", [5, 3], "230 V",  Math.PI * 0.2);
+  drawIecRing(IEC_NOM_DISP,  "rgba(255,255,255,0.30)", [5, 3], "230 V",  Math.PI * 0.2);
 
   // ── Mean-voltage reference ring (dashed, dim) ──
   ctx.beginPath();
@@ -1799,8 +1814,8 @@ function drawWyeDiagram(v1, v2, v3) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // ── Line-to-line differential chords (LL arcs drawn as straight chords) ──
-  // Drawn before the phase vectors so they appear underneath.
+  // ── Line-to-line differential chords ──
+  // Chord geometry reflects display magnitudes; labels show calculated LL voltage.
   const drawChord = (pa, pb, color, label, labelOffset) => {
     ctx.beginPath();
     ctx.moveTo(pa.x, pa.y);
@@ -1824,9 +1839,9 @@ function drawWyeDiagram(v1, v2, v3) {
   const llMag13 = lineVoltage(v1, v3);
   const llMag23 = lineVoltage(v2, v3);
 
-  drawChord(p1, p2, cl12, `L1–L2 ${llMag12.toFixed(1)} V`, { x: 14, y: -6 });
-  drawChord(p1, p3, cl13, `L1–L3 ${llMag13.toFixed(1)} V`, { x: -14, y: -6 });
-  drawChord(p2, p3, cl23, `L2–L3 ${llMag23.toFixed(1)} V`, { x: 0, y: 14 });
+  drawChord(p1, p2, cl12, `L1\u2013L2 ${llMag12.toFixed(1)} V`, { x: 14, y: -6 });
+  drawChord(p1, p3, cl13, `L1\u2013L3 ${llMag13.toFixed(1)} V`, { x: -14, y: -6 });
+  drawChord(p2, p3, cl23, `L2\u2013L3 ${llMag23.toFixed(1)} V`, { x: 0, y: 14 });
 
   // ── Phase voltage vectors ──
   const drawVector = (p, color, label, mag) => {
@@ -1864,11 +1879,14 @@ function drawWyeDiagram(v1, v2, v3) {
     ctx.fillText(`${label} ${mag.toFixed(1)} V`, p.x + offX, p.y + offY);
   };
 
+  // Pass actual voltages for labels; phasor tips already computed from display magnitudes.
   drawVector(p1, cl1, "L1", v1);
   drawVector(p2, cl2, "L2", v2);
   drawVector(p3, cl3, "L3", v3);
 
   // ── Neutral offset vector ──
+  // Computed from actual voltages — the display base cancels in the centroid
+  // calculation so the result is identical either way.
   const ns  = neutralShift(v1, v2, v3);
   const npx = cx + ns.re * scale;
   const npy = cy - ns.im * scale;
@@ -1897,11 +1915,20 @@ function drawWyeDiagram(v1, v2, v3) {
   ctx.fillStyle = cText;
   ctx.fill();
 
-  // ── Centre label (mean voltage) ──
+  // ── Centre label: actual mean voltage ──
+  const meanV = (v1 + v2 + v3) / 3;
   ctx.font      = "10px 'JetBrains Mono', monospace";
   ctx.fillStyle = cText;
   ctx.textAlign = "center";
   ctx.fillText(`mean ${meanV.toFixed(1)} V`, cx, cy - 10);
+
+  // ── Corner note: display base so diagram is not misread as absolute scale ──
+  ctx.font         = "8px 'JetBrains Mono', monospace";
+  ctx.fillStyle    = cTextDim;
+  ctx.textAlign    = "left";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(`\u2212${WYE_DISPLAY_OFFSET} V base`, 6, H - 4);
+  ctx.textBaseline = "alphabetic";
 }
 
 /**
