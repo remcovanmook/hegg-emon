@@ -458,6 +458,19 @@ document.addEventListener("DOMContentLoaded", () => {
     trimOldAnnotations(cutoff);
   }, 60_000);
 
+  // Render electricity charts at 2-second intervals.
+  // Data continues to accumulate in chart arrays at 1 Hz; only the canvas
+  // repaint is throttled. Each repaint redraws all data points via the 2D
+  // canvas API — at 1 Hz on a 24-hour dataset this was 90 %+ of main-thread
+  // time. DOM number displays and the wye diagram remain at 1 Hz.
+  setInterval(() => {
+    if (!powerChart.canvas.closest("[hidden]")) {
+      powerChart.update("none");
+      voltageCharts.forEach(c => c.update("none"));
+      currentCharts.forEach(c => c.update("none"));
+    }
+  }, 2000);
+
   // Clock — updates every second.
   const tickClock = () => setText("header-time", new Date().toLocaleTimeString());
   tickClock();
@@ -1235,12 +1248,9 @@ function appendToCharts(r) {
   // Doing it here every second with Array.shift() on large arrays is O(n)
   // per tick and was a primary source of CPU load in long-running sessions.
 
-  // Only repaint charts that are currently visible.
-  if (!powerChart.canvas.closest("[hidden]")) {
-    powerChart.update("none");
-    voltageCharts.forEach(c => c.update("none"));
-    currentCharts.forEach(c => c.update("none"));
-  }
+  // Chart repaints are handled by the render interval (see DOMContentLoaded).
+  // Calling chart.update() here every second was 90 %+ of main-thread paint
+  // cost. Data accumulates in the arrays at 1 Hz; the canvas redraws at 2 Hz.
 }
 
 /**
