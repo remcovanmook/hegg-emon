@@ -696,10 +696,13 @@ function makeDataset(label, color, fill = true) {
  *
  * @param {number} hours
  */
+let currentHistoryFetchId = 0;
 async function loadHistory(hours) {
+  const fetchId = ++currentHistoryFetchId;
   let data;
   try {
     const res = await fetch(`/api/history?hours=${hours}`);
+    if (fetchId !== currentHistoryFetchId) return;
     if (!res.ok) return;
     data = await res.json();
   } catch { return; }
@@ -882,10 +885,13 @@ async function loadSummaryLatest() {
  * Fetch and display delta values for the selected time window.
  * @param {number} hours
  */
+let currentSummaryDeltaFetchId = 0;
 async function loadSummaryDelta(hours) {
+  const fetchId = ++currentSummaryDeltaFetchId;
   let d;
   try {
     const res = await fetch(`/api/summary/delta?hours=${hours}`);
+    if (fetchId !== currentSummaryDeltaFetchId) return;
     if (res.status === 204) { clearDeltas(); return; }
     if (!res.ok) return;
     d = await res.json();
@@ -1053,13 +1059,16 @@ function _barOpts(yLabel, tickFmt, tooltipFmt, stacked = false) {
  * Prices are optional — consumption charts always render, cost chart only
  * renders for hours where a price is available.
  */
+let currentUsageFetchId = 0;
 async function loadUsageCharts() {
+  const fetchId = ++currentUsageFetchId;
   let consumption, prices;
   try {
     const [rC, rP] = await Promise.all([
       fetch(`/api/summary/hourly?hours=${selectedHours}`),
       fetch(`/api/prices?hours=${selectedHours}`),
     ]);
+    if (fetchId !== currentUsageFetchId) return;
     if (!rC.ok || rC.status === 204) return;
     consumption = await rC.json();
     prices = rP.ok && rP.status !== 204 ? await rP.json() : [];
@@ -1190,6 +1199,10 @@ function connectSSE() {
   eventSource.addEventListener("message", event => {
     try {
       sseBuffer.push(JSON.parse(event.data));
+      // Hard cap to prevent memory leak in long-running background tabs (24h of 1Hz data)
+      if (sseBuffer.length > 86400) {
+        sseBuffer.splice(0, sseBuffer.length - 86400);
+      }
       if (!sseRafPending) {
         sseRafPending = true;
         requestAnimationFrame(drainSSEBuffer);
@@ -1223,8 +1236,10 @@ function setStatus(state, label) {
  */
 function drainSSEBuffer() {
   sseRafPending = false;
-  while (sseBuffer.length > 0) {
-    applyReading(sseBuffer.shift());
+  // O(1) array drain prevents CPU lockup in background tabs
+  const batch = sseBuffer.splice(0, sseBuffer.length);
+  for (let i = 0; i < batch.length; i++) {
+    applyReading(batch[i]);
   }
 }
 

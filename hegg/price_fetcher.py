@@ -145,6 +145,8 @@ class PriceFetcher:
             logger.error("Price fetch network error: %s", exc.reason)
         except (ValueError, KeyError) as exc:
             logger.error("Price fetch parse error: %s", exc)
+        except Exception as exc:
+            logger.error("Price fetch unexpected error: %s", exc)
         return False
 
     @staticmethod
@@ -182,7 +184,7 @@ class PriceFetcher:
         while True:
             wait = self._seconds_until_next_fetch()
             logger.debug("Next price fetch in %.0f s (at %02d:00 UTC)", wait, _FETCH_HOUR_UTC)
-            time.sleep(wait)
+            threading.Event().wait(wait)
             self._fetch_and_store()
 
     def start(self) -> threading.Thread:
