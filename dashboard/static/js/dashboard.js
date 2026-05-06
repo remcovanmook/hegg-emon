@@ -386,7 +386,7 @@ function recolorCharts() {
 
   Chart.defaults.color = tick;
 
-  [powerChart, ...voltageCharts, ...currentCharts, usageChart, costChart, gasChart, gasCostChart, forecastChart].filter(Boolean).forEach(chart => {
+  [powerChart, ...voltageCharts, ...currentCharts, usageChart, costChart, gasChart, gasCostChart, forecastPricesChart, forecastWeatherChart].filter(Boolean).forEach(chart => {
     for (const axis of Object.values(chart.options.scales)) {
       if (axis.ticks) axis.ticks.color = tick;
       if (axis.grid)  axis.grid.color  = grid;
@@ -1023,7 +1023,8 @@ function switchTab(tabId) {
       if (c) { c.resize(); c.update("none"); }
     });
   } else if (tabId === "forecast") {
-    if (forecastChart) { forecastChart.resize(); forecastChart.update("none"); }
+    if (forecastPricesChart) { forecastPricesChart.resize(); forecastPricesChart.update("none"); }
+    if (forecastWeatherChart) { forecastWeatherChart.resize(); forecastWeatherChart.update("none"); }
   } else {
     [powerChart, ...voltageCharts, ...currentCharts].forEach(c => {
       if (c) { c.resize(); c.update("none"); }
@@ -1088,7 +1089,8 @@ function _barOpts(yLabel, tickFmt, tooltipFmt, stacked = false) {
 /** @type {Chart|null} */ let usageChart = null;
 /** @type {Chart|null} */ let gasChart   = null;
 /** @type {Chart|null} */ let gasCostChart = null;
-/** @type {Chart|null} */ let forecastChart = null;
+/** @type {Chart|null} */ let forecastPricesChart = null;
+/** @type {Chart|null} */ let forecastWeatherChart = null;
 
 /**
  * Fetch hourly consumption and price data and populate all three Usage &
@@ -1265,52 +1267,100 @@ async function loadUsageCharts() {
 /* ── Forecast & Pricing tab ────────────────────────────────────────────── */
 
 function initForecastChart() {
-  const ctx = document.getElementById("chart-forecast");
-  if (!ctx) return;
-  forecastChart = new Chart(ctx, {
-    type: "line",
-    data: { datasets: [] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      interaction: { mode: "index", intersect: false },
-      scales: {
-        x: {
-          type: "time",
-          grid: { color: () => WYE_CSS.grid, drawBorder: false },
-          ticks: { color: () => WYE_CSS.text, maxRotation: 0, autoSkip: true, autoSkipPadding: 20 },
+  const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { display: true, position: "bottom", labels: { color: () => WYE_CSS.text, boxWidth: 12 } }
+    }
+  };
+
+  const ctxPrices = document.getElementById("chart-forecast-prices");
+  if (ctxPrices) {
+    forecastPricesChart = new Chart(ctxPrices, {
+      type: "line",
+      data: { datasets: [] },
+      options: {
+        ...commonOptions,
+        scales: {
+          x: {
+            type: "time",
+            grid: { color: () => WYE_CSS.grid, drawBorder: false },
+            ticks: { color: () => WYE_CSS.text, maxRotation: 0, autoSkip: true, autoSkipPadding: 20 },
+          },
+          yElec: {
+            type: "linear",
+            position: "left",
+            title: { display: true, text: "Electricity (€/kWh)", color: () => WYE_CSS.text },
+            grid: { color: () => WYE_CSS.grid, drawBorder: false },
+            ticks: { color: () => WYE_CSS.text },
+          },
+          yGas: {
+            type: "linear",
+            position: "right",
+            title: { display: true, text: "Gas (€/m³)", color: () => WYE_CSS.text },
+            grid: { display: false },
+            ticks: { color: () => WYE_CSS.text },
+          }
         },
-        yPrice: {
-          type: "linear",
-          position: "left",
-          title: { display: true, text: "Price (€/unit)" },
-          grid: { color: () => WYE_CSS.grid, drawBorder: false },
-          ticks: { color: () => WYE_CSS.text },
-        },
-        yWeather: {
-          type: "linear",
-          position: "right",
-          title: { display: true, text: "Temp / Solar" },
-          grid: { display: false },
-          ticks: { color: () => WYE_CSS.text },
-        }
-      },
-      plugins: {
-        legend: { display: true, position: "bottom", labels: { color: () => WYE_CSS.text } },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const val = ctx.raw.y;
-              if (ctx.dataset.label.includes("Solar")) return `${ctx.dataset.label}: ${val} W/m²`;
-              if (ctx.dataset.label.includes("Temp")) return `${ctx.dataset.label}: ${val} °C`;
-              return `${ctx.dataset.label}: €${val.toFixed(3)}`;
+        plugins: {
+          ...commonOptions.plugins,
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: €${ctx.raw.y.toFixed(3)}`
             }
           }
         }
       }
-    }
-  });
+    });
+  }
+
+  const ctxWeather = document.getElementById("chart-forecast-weather");
+  if (ctxWeather) {
+    forecastWeatherChart = new Chart(ctxWeather, {
+      type: "line",
+      data: { datasets: [] },
+      options: {
+        ...commonOptions,
+        scales: {
+          x: {
+            type: "time",
+            grid: { color: () => WYE_CSS.grid, drawBorder: false },
+            ticks: { color: () => WYE_CSS.text, maxRotation: 0, autoSkip: true, autoSkipPadding: 20 },
+          },
+          yTemp: {
+            type: "linear",
+            position: "left",
+            title: { display: true, text: "Temp (°C)", color: () => WYE_CSS.text },
+            grid: { color: () => WYE_CSS.grid, drawBorder: false },
+            ticks: { color: () => WYE_CSS.text },
+          },
+          ySolar: {
+            type: "linear",
+            position: "right",
+            title: { display: true, text: "Solar (W/m²)", color: () => WYE_CSS.text },
+            grid: { display: false },
+            ticks: { color: () => WYE_CSS.text },
+            beginAtZero: true
+          }
+        },
+        plugins: {
+          ...commonOptions.plugins,
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const val = ctx.raw.y;
+                if (ctx.dataset.label.includes("Solar")) return `${ctx.dataset.label}: ${val} W/m²`;
+                return `${ctx.dataset.label}: ${val.toFixed(1)} °C`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
 }
 
 let currentForecastFetchId = 0;
@@ -1319,9 +1369,9 @@ async function loadForecastChart() {
   let pricesElec, pricesGas, weather;
   try {
     const [rPE, rPG, rW] = await Promise.all([
-      fetch(`/api/prices?hours=24`),
-      fetch(`/api/prices/gas?hours=24`),
-      fetch(`/api/weather?hours=24`),
+      fetch(`/api/prices?hours=48`),
+      fetch(`/api/prices/gas?hours=48`),
+      fetch(`/api/weather?hours=48`),
     ]);
     if (fetchId !== currentForecastFetchId) return;
     pricesElec = (rPE.ok && rPE.status !== 204) ? await rPE.json() : [];
@@ -1331,10 +1381,23 @@ async function loadForecastChart() {
     return;
   }
 
-  // Update DOM current values
   const now = Date.now();
-  const currentElec = pricesElec.find(p => p.ts_start <= now && p.ts_end > now);
-  const currentGas = pricesGas.find(p => p.ts_start <= now && p.ts_end > now);
+  const nowMs = Math.floor(now / 3600000) * 3600000;
+  const maxMs = nowMs + (48 * 3600000);
+
+  // Filter all data strictly to [nowMs, maxMs]
+  const filterByTime = (p) => {
+    const ts = p.ts || p.ts_start;
+    return ts >= nowMs && ts <= maxMs;
+  };
+  
+  pricesElec = pricesElec.filter(filterByTime);
+  // For gas, we just need it to intersect the window
+  const validGas = pricesGas.filter(p => p.ts_end > nowMs && p.ts_start < maxMs);
+  weather = weather.filter(filterByTime);
+
+  const currentElec = pricesElec.length > 0 ? pricesElec[0] : null;
+  const currentGas = validGas.find(p => p.ts_start <= now && p.ts_end > now) || validGas[0];
   
   if (currentElec) {
     const loadedE = (currentElec.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
@@ -1345,15 +1408,16 @@ async function loadForecastChart() {
     document.getElementById("current-gas-price").textContent = `€${loadedG.toFixed(3)}`;
   }
 
-  // For weather, we find the closest hourly bucket
   let currentTempStr = "—";
   if (weather.length > 0) {
-    const sortedWeather = [...weather].sort((a, b) => Math.abs(a.ts - now) - Math.abs(b.ts - now));
-    currentTempStr = `${sortedWeather[0].temperature_c.toFixed(1)} °C`;
+    currentTempStr = `${weather[0].temperature_c.toFixed(1)} °C`;
   }
   document.getElementById("current-temp").textContent = currentTempStr;
 
-  if (forecastChart) {
+  if (forecastPricesChart) {
+    forecastPricesChart.options.scales.x.min = nowMs;
+    forecastPricesChart.options.scales.x.max = maxMs;
+
     const dsElec = {
       label: "Electricity Cost",
       data: pricesElec.map(p => {
@@ -1361,46 +1425,57 @@ async function loadForecastChart() {
         return { x: p.ts_start, y: loadedPE };
       }),
       borderColor: COLORS.delivered,
-      backgroundColor: COLORS.delivered + "33", // 20% opacity
-      yAxisID: "yPrice",
+      backgroundColor: COLORS.delivered + "33",
+      yAxisID: "yElec",
       stepped: "before",
       fill: "origin"
     };
-    // Gas prices step daily. We duplicate points at start and end of day so stepped line draws correctly.
+    
     const gasData = [];
-    pricesGas.forEach(p => {
+    validGas.forEach(p => {
       const loadedPG = (p.price_eur_m3 + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
-      gasData.push({ x: p.ts_start, y: loadedPG });
-      gasData.push({ x: p.ts_end, y: loadedPG });
+      gasData.push({ x: Math.max(p.ts_start, nowMs), y: loadedPG });
+      gasData.push({ x: Math.min(p.ts_end, maxMs), y: loadedPG });
     });
+    
     const dsGas = {
       label: "Gas Cost",
       data: gasData,
       borderColor: COLORS.returned,
       backgroundColor: COLORS.returned + "33",
-      yAxisID: "yPrice",
-      stepped: false, // already stepped via point duplication
-      fill: "origin"
+      yAxisID: "yGas",
+      stepped: false,
+      fill: "origin",
+      borderDash: [5, 5]
     };
+
+    forecastPricesChart.data.datasets = [dsElec, dsGas];
+    forecastPricesChart.update();
+  }
+
+  if (forecastWeatherChart) {
+    forecastWeatherChart.options.scales.x.min = nowMs;
+    forecastWeatherChart.options.scales.x.max = maxMs;
+
     const dsTemp = {
       label: "Temperature",
       data: weather.map(w => ({ x: w.ts, y: w.temperature_c })),
       borderColor: COLORS.voltage,
-      yAxisID: "yWeather",
+      yAxisID: "yTemp",
       tension: 0.4
     };
     const dsSolar = {
       label: "Solar Radiation",
       data: weather.map(w => ({ x: w.ts, y: w.solar_wm2 })),
-      borderColor: "#fadb14", // yellow/sun
+      borderColor: "#fadb14",
       backgroundColor: "#fadb1433",
-      yAxisID: "yWeather",
+      yAxisID: "ySolar",
       fill: true,
       tension: 0.4
     };
 
-    forecastChart.data.datasets = [dsElec, dsGas, dsTemp, dsSolar];
-    forecastChart.update();
+    forecastWeatherChart.data.datasets = [dsTemp, dsSolar];
+    forecastWeatherChart.update();
   }
 }
 
