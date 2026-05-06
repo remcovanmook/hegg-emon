@@ -750,9 +750,14 @@ function applyPendingFrame() {
   buildXAxisCache(frame.hours);
   applyXAxisConfig();
 
-  powerChart.update();
-  voltageCharts.forEach(c => c.update());
-  currentCharts.forEach(c => c.update());
+  // Only repaint if the electricity tab is currently visible.
+  // The canvas.closest('[hidden]') traversal checks whether any ancestor
+  // panel has the hidden attribute — no separate state variable needed.
+  if (!powerChart.canvas.closest("[hidden]")) {
+    powerChart.update();
+    voltageCharts.forEach(c => c.update());
+    currentCharts.forEach(c => c.update());
+  }
 }
 
 /* ── Summary ────────────────────────────────────────────────────────────── */
@@ -882,10 +887,14 @@ function switchTab(tabId) {
     }
   }
   // Chart.js cannot measure a hidden element; resize after reveal.
+  // Also force a data repaint so any updates that arrived while the
+  // electricity tab was hidden are rendered immediately on switch.
   if (tabId === "usage") {
     [usageChart, costChart, gasChart].forEach(c => c && c.resize());
   } else {
-    [powerChart, ...voltageCharts, ...currentCharts].forEach(c => c && c.resize());
+    [powerChart, ...voltageCharts, ...currentCharts].forEach(c => {
+      if (c) { c.resize(); c.update("none"); }
+    });
   }
 }
 
@@ -1216,9 +1225,12 @@ function appendToCharts(r) {
   // Calling it every second creates a new afterBuildTicks closure per chart
   // per tick and was the primary source of CPU load.
 
-  powerChart.update("none");
-  voltageCharts.forEach(c => c.update("none"));
-  currentCharts.forEach(c => c.update("none"));
+  // Only repaint charts that are currently visible.
+  if (!powerChart.canvas.closest("[hidden]")) {
+    powerChart.update("none");
+    voltageCharts.forEach(c => c.update("none"));
+    currentCharts.forEach(c => c.update("none"));
+  }
 }
 
 /**
