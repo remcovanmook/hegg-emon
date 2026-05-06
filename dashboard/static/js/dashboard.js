@@ -51,6 +51,20 @@ let COLORS = chartPalette();
  */
 let WYE_CSS = {};
 
+/* ── Taxes & Tariffs (NL defaults) ─────────────────────────────────────── */
+
+const TARIFFS = {
+  vatMultiplier: 1.21,
+  electricity: {
+    energyTax: 0.10880, // €/kWh (ex VAT)
+    providerFee: 0.02,  // €/kWh (ex VAT)
+  },
+  gas: {
+    energyTax: 0.58300, // €/m³ (ex VAT)
+    providerFee: 0.08,  // €/m³ (ex VAT)
+  }
+};
+
 /**
  * X-axis tick configuration per history window.
  * unit + stepSize are passed directly to Chart.js time scale.
@@ -1121,6 +1135,9 @@ async function loadUsageCharts() {
   const labels = [], d1 = [], d2 = [], r1 = [], r2 = [], gas = [];
   const importCost = [], exportRevenue = [], gasCost = [];
 
+  let totalElecSpot = 0, totalElecTaxFee = 0;
+  let totalGasSpot = 0, totalGasTaxFee = 0;
+
   for (let h = startMs; h <= nowMs; h += HOUR_MS) {
     const c     = consumMap[h];
     const price = priceMap[h] ?? null;
@@ -1137,9 +1154,28 @@ async function loadUsageCharts() {
     r1.push(-(+(ret1.toFixed(4))));
     r2.push(-(+(ret2.toFixed(4))));
     gas.push(+(gasV.toFixed(4)));
-    importCost.push(   price !== null ? +((del1 + del2) * price).toFixed(4) : 0);
-    exportRevenue.push(price !== null ? -(+(ret1 + ret2) * price).toFixed(4) : 0);
-    gasCost.push(      gasP  !== null ? +(gasV * gasP).toFixed(4) : 0);
+
+    let loadedPE = null;
+    if (price !== null) {
+      const imp = del1 + del2;
+      const exp = ret1 + ret2;
+      const netKwh = imp - exp;
+      
+      totalElecSpot += (imp * price) - (exp * price);
+      totalElecTaxFee += netKwh * (TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee);
+      loadedPE = (price + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
+    }
+    
+    let loadedPG = null;
+    if (gasP !== null) {
+      totalGasSpot += gasV * gasP;
+      totalGasTaxFee += gasV * (TARIFFS.gas.energyTax + TARIFFS.gas.providerFee);
+      loadedPG = (gasP + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
+    }
+
+    importCost.push(   loadedPE !== null ? +((del1 + del2) * loadedPE).toFixed(4) : 0);
+    exportRevenue.push(loadedPE !== null ? -(+(ret1 + ret2) * loadedPE).toFixed(4) : 0);
+    gasCost.push(      loadedPG !== null ? +(gasV * loadedPG).toFixed(4) : 0);
   }
 
   // Cache is already current from loadHistory; just apply it.
@@ -1203,12 +1239,24 @@ async function loadUsageCharts() {
   if (costDeltaIn)  costDeltaIn.textContent  = `↓ €${totalImport.toFixed(2)} / ${_label}`;
   if (costDeltaOut) costDeltaOut.textContent = `↑ €${totalExport.toFixed(2)} / ${_label}`;
 
+  const elecBrk = document.getElementById("cost-elec-breakdown");
+  if (elecBrk) {
+    const totalElecVat = (totalElecSpot + totalElecTaxFee) * (TARIFFS.vatMultiplier - 1);
+    elecBrk.textContent = `Spot: €${totalElecSpot.toFixed(2)} | Tax+Fee: €${totalElecTaxFee.toFixed(2)} | VAT: €${totalElecVat.toFixed(2)}`;
+  }
+
   // Gas totals.
   const totalGas = gas.reduce((a, b) => a + b, 0);
   setText("gas-total-val", totalGas.toFixed(3));
   
   const totalGasCost = gasCost.reduce((a, b) => a + b, 0);
   setText("cost-gas-total", totalGasCost.toFixed(2));
+
+  const gasBrk = document.getElementById("cost-gas-breakdown");
+  if (gasBrk) {
+    const totalGasVat = (totalGasSpot + totalGasTaxFee) * (TARIFFS.vatMultiplier - 1);
+    gasBrk.textContent = `Spot: €${totalGasSpot.toFixed(2)} | Tax+Fee: €${totalGasTaxFee.toFixed(2)} | VAT: €${totalGasVat.toFixed(2)}`;
+  }
 
 }
 
@@ -1286,8 +1334,14 @@ async function loadForecastChart() {
   const currentElec = pricesElec.find(p => p.ts_start <= now && p.ts_end > now);
   const currentGas = pricesGas.find(p => p.ts_start <= now && p.ts_end > now);
   
-  if (currentElec) document.getElementById("current-elec-price").textContent = `€${currentElec.price_eur_kwh.toFixed(3)}`;
-  if (currentGas) document.getElementById("current-gas-price").textContent = `€${currentGas.price_eur_m3.toFixed(3)}`;
+  if (currentElec) {
+    const loadedE = (currentElec.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
+    document.getElementById("current-elec-price").textContent = `€${loadedE.toFixed(3)}`;
+  }
+  if (currentGas) {
+    const loadedG = (currentGas.price_eur_m3 + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
+    document.getElementById("current-gas-price").textContent = `€${loadedG.toFixed(3)}`;
+  }
 
   // For weather, we find the closest hourly bucket
   let currentTempStr = "—";
@@ -1299,8 +1353,11 @@ async function loadForecastChart() {
 
   if (forecastChart) {
     const dsElec = {
-      label: "Electricity (EPEX)",
-      data: pricesElec.map(p => ({ x: p.ts_start, y: p.price_eur_kwh })),
+      label: "Electricity Cost",
+      data: pricesElec.map(p => {
+        const loadedPE = (p.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
+        return { x: p.ts_start, y: loadedPE };
+      }),
       borderColor: COLORS.delivered,
       backgroundColor: COLORS.delivered + "33", // 20% opacity
       yAxisID: "yPrice",
@@ -1310,11 +1367,12 @@ async function loadForecastChart() {
     // Gas prices step daily. We duplicate points at start and end of day so stepped line draws correctly.
     const gasData = [];
     pricesGas.forEach(p => {
-      gasData.push({ x: p.ts_start, y: p.price_eur_m3 });
-      gasData.push({ x: p.ts_end, y: p.price_eur_m3 });
+      const loadedPG = (p.price_eur_m3 + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
+      gasData.push({ x: p.ts_start, y: loadedPG });
+      gasData.push({ x: p.ts_end, y: loadedPG });
     });
     const dsGas = {
-      label: "Gas (TTF)",
+      label: "Gas Cost",
       data: gasData,
       borderColor: COLORS.returned,
       backgroundColor: COLORS.returned + "33",
