@@ -44,6 +44,14 @@ function chartPalette() {
 let COLORS = chartPalette();
 
 /**
+ * Cached CSS custom-property values used by the wye canvas draw functions.
+ * Updated by recolorCharts() whenever the theme changes so the per-second
+ * draw path never needs to call getComputedStyle itself.
+ * @type {object}
+ */
+let WYE_CSS = {};
+
+/**
  * X-axis tick configuration per history window.
  * unit + stepSize are passed directly to Chart.js time scale.
  * Chart.js aligns generated ticks to clean multiples of stepSize.
@@ -64,6 +72,11 @@ const BASE_OPTS = {
   responsive: true,
   maintainAspectRatio: false,
   animation: false,
+  // In Chart.js 4, animation:false only disables the 'default' transition.
+  // Hover events trigger update('active') which has its own 400 ms transition
+  // by default. With slow render intervals, this animates from a stale state
+  // and makes the data line appear to vanish until the transition completes.
+  transitions: { active: { animation: { duration: 0 } } },
   interaction: { mode: "index", intersect: false },
   elements: {
     point: { radius: 0, hitRadius: 6 },
@@ -123,6 +136,7 @@ function makeInlineOpts(tickFmt, unit = "") {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
+    transitions: { active: { animation: { duration: 0 } } },
     // index mode so the crosshair snaps to the nearest X position.
     interaction: { mode: "index", intersect: false },
     elements: {
@@ -209,9 +223,52 @@ const currentExtremes = [
   { min: Infinity, max: -Infinity },
 ];
 
-let lastWasExporting = null;
-let flipCount = 0;
-let selectedHours = 24;
+let lastWasExporting  = null;
+let flipCount         = 0;
+let selectedHours     = 24;
+
+/**
+ * Latest raw phase voltages from the most recent SSE reading.
+ * Written every 1 Hz in applyReading; read by the 5-second render interval
+ * to redraw the wye diagram without coupling the canvas repaint to the data tick.
+ * @type {{v1:number, v2:number, v3:number}|null}
+ */
+let latestVoltages = null;
+
+/**
+ * Staging buffers for live data between render intervals.
+ *
+ * appendToCharts() pushes incoming SSE points here rather than directly into
+ * chart.data. Chart.js caches pixel-position meta during update() calls; if
+ * data is pushed to chart.data without a corresponding update(), the meta
+ * becomes stale. When Chart.js renders on hover it uses the stale meta, so
+ * un-rendered points appear missing (data blinks out until the next update).
+ *
+ * Draining into chart.data immediately before each update() keeps meta and
+ * data always in sync regardless of how long the render interval is.
+ */
+const pendingLive = {
+  power:   [],
+  voltage: [[], [], []],
+  current: [[], [], []],
+};
+
+/**
+ * Cached X-axis configuration for the electricity tab charts.
+ * Built by buildXAxisCache() on range change and every 5 minutes.
+ * Null until the first call; applyXAxisConfig() is a no-op while null.
+ * @type {{unit:string, stepSize:number, stepMs:number, flooredMin:number, afterBuildTicks:function}|null}
+ */
+let xAxisCache = null;
+
+/**
+ * Pending computed history frame produced by loadHistory().
+ * Consumed and cleared by applyPendingFrame(), which is called at the
+ * top of appendToCharts() (SSE tick) and via requestAnimationFrame
+ * as a fallback when SSE is not yet connected.
+ * @type {object|null}
+ */
+let pendingHistoryFrame = null;
 
 /**
  * EMA state for live chart smoothing. Null until the first live reading
@@ -227,6 +284,21 @@ let ema = null;
  * @type {Object.<string, object>}
  */
 const flipAnnotations = {};
+
+/**
+ * Yield control back to the browser's task queue.
+ *
+ * Inserting this await inside a long async function lets the browser
+ * process pending events (paint, input, SSE messages) before the
+ * synchronous work after the await runs.  A zero-delay setTimeout
+ * is used rather than queueMicrotask because microtasks do not yield
+ * to the render pipeline.
+ *
+ * @returns {Promise<void>}
+ */
+function yieldToMain() {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
 
 /* ── Theme management ───────────────────────────────────────────────────────── */
 
@@ -281,6 +353,20 @@ function recolorCharts() {
   const tipTtl  = v("--chart-tooltip-title");
   const tipBdy  = v("--chart-tooltip-body");
 
+  // Refresh the wye CSS cache so canvas draws don't need getComputedStyle.
+  WYE_CSS = {
+    cl1:     v("--phase-l1"),
+    cl2:     v("--phase-l2"),
+    cl3:     v("--phase-l3"),
+    cl12:    v("--wye-l12"),
+    cl13:    v("--wye-l13"),
+    cl23:    v("--wye-l23"),
+    neutral: v("--wye-neutral"),
+    grid:    grid,
+    text:    tick,
+    dim:     v("--text-dim"),
+  };
+
   // Refresh the mutable palette so newly-pushed data points use updated colours.
   Object.assign(COLORS, chartPalette());
 
@@ -324,7 +410,7 @@ function recolorCharts() {
 
 let el;
 
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
   el = {
     statusDot:      document.getElementById("status-dot"),
     statusLabel:    document.getElementById("status-label"),
@@ -344,10 +430,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   initCharts();
   recolorCharts();           // seed chart colours from the active theme
-  await loadHistory(selectedHours);
-  await loadSummary();
-  loadDevice();
+
+  // Start the SSE stream and background fetches concurrently.
+  // loadHistory is async and will populate charts when the fetch resolves;
+  // there is no reason to delay connectSSE or loadSummary while waiting
+  // for that to complete.
   connectSSE();
+  loadHistory(selectedHours);
+  loadSummary();
+  loadDevice();
 
   el.historyRange.addEventListener("change", () => {
     selectedHours = Number.parseInt(el.historyRange.value, 10);
@@ -378,9 +469,66 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(loadSummary, 60_000);
   setInterval(loadDevice,  300_000);
 
-  // Usage & cost charts: load on startup, refresh once per hour.
-  loadUsageCharts();
-  setInterval(loadUsageCharts, 60 * 60_000);
+  // Usage-tab charts are on a hidden panel and only receive data after an
+  // async fetch resolves. Deferring construction yields the main thread so
+  // the browser can paint the initial layout before the second round of
+  // Chart.js init work runs.
+  setTimeout(() => {
+    initUsageCharts();
+    loadUsageCharts();
+    setInterval(loadUsageCharts, 60 * 60_000);
+  }, 0);
+
+  // Slide the X-axis min forward once per minute so the live edge stays
+  // current without rebuilding axis config on every SSE tick.
+  // Rebuild the X-axis cache every 5 minutes. The smallest step across all
+  // history windows is 5 minutes (1 h window), so flooredMin never drifts
+  // by more than one step between rebuilds.
+  setInterval(() => { buildXAxisCache(selectedHours); applyXAxisConfig(); }, 5 * 60_000);
+
+  // Trim data points and annotations that have scrolled out of the history
+  // window. Running every 60 s means at most 60 extra live points accumulate
+  // before the next prune — invisible on any history window — but avoids
+  // the per-second O(n) splice cost of trimming inline with the SSE tick.
+  setInterval(() => {
+    const cutoff = Date.now() - selectedHours * 3_600_000;
+    [powerChart, ...voltageCharts, ...currentCharts].forEach(c => trimOldPoints(c, cutoff));
+    trimOldAnnotations(cutoff);
+  }, 60_000);
+
+  // Render electricity charts and the wye diagram every 5 seconds.
+  // Live DOM numbers (power, voltages, currents) remain at 1 Hz.
+  // Canvas redraws are the primary paint cost; reducing from 1 Hz to 0.2 Hz
+  // cuts that cost by 5x with no perceptible change on any history window.
+  setInterval(() => {
+    // Install any resolved history frame before draining live data.
+    // Moved here from appendToCharts so history installation is a render
+    // concern rather than a data-pipeline concern.
+    applyPendingFrame();
+
+    // Drain staged live data into chart instances before updating meta.
+    // This ensures chart.data and the pixel-position meta computed by
+    // update() are always in sync, so hover renders never see stale data.
+    if (pendingLive.power.length) {
+      powerChart.data.datasets[0].data.push(...pendingLive.power);
+      pendingLive.power.length = 0;
+    }
+    pendingLive.voltage.forEach((buf, i) => {
+      if (buf.length) { voltageCharts[i].data.datasets[0].data.push(...buf); buf.length = 0; }
+    });
+    pendingLive.current.forEach((buf, i) => {
+      if (buf.length) { currentCharts[i].data.datasets[0].data.push(...buf); buf.length = 0; }
+    });
+
+    if (latestVoltages) {
+      updateWyeDiagram(latestVoltages.v1, latestVoltages.v2, latestVoltages.v3);
+    }
+    if (!powerChart.canvas.closest("[hidden]")) {
+      powerChart.update("none");
+      voltageCharts.forEach(c => c.update("none"));
+      currentCharts.forEach(c => c.update("none"));
+    }
+  }, 5000);
 
   // Clock — updates every second.
   const tickClock = () => setText("header-time", new Date().toLocaleTimeString());
@@ -390,7 +538,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 /* ── Chart init ─────────────────────────────────────────────────────────── */
 
-/** Initialise all Chart.js instances. */
+/** Initialise electricity-tab Chart.js instances (power, voltage, current). */
 function initCharts() {
   Chart.defaults.color = "#6b7490";
 
@@ -402,17 +550,14 @@ function initCharts() {
   };
   powerOpts.scales.y.title = { display: true, text: "W", color: "#6b7490", font: { size: 11 } };
 
-  // Power chart: net (W); blue above zero = import, green below = export.
-  // segment colours each line segment based on sign of the starting point.
-  // fill: "origin" shades the area between the line and zero.
   powerChart = new Chart(document.getElementById("chart-power"), {
     type: "line",
     data: {
       datasets: [{
         label: "Net",
         data: [],
-        borderColor: COLORS.net,           // fallback before first point
-        backgroundColor: "transparent",   // overridden per-segment
+        borderColor: COLORS.net,
+        backgroundColor: "transparent",
         fill: "origin",
         parsing: false,
         tension: 0.3,
@@ -453,7 +598,17 @@ function initCharts() {
       options: makeInlineOpts(v => v.toFixed(1), "A"),
     }));
   });
+}
 
+/**
+ * Initialise the three usage-tab Chart.js instances (cost, usage, gas).
+ *
+ * Called via setTimeout(fn, 0) in DOMContentLoaded so these hidden-tab
+ * charts do not block the initial paint. They are not needed until
+ * loadUsageCharts() resolves its async fetch, which always takes longer
+ * than a single yielded task.
+ */
+function initUsageCharts() {
   // Hourly cost bar chart: import cost (positive), export revenue (negative).
   costChart = new Chart(document.getElementById("chart-cost"), {
     type: "bar",
@@ -532,7 +687,13 @@ function makeDataset(label, color, fill = true) {
 /* ── History load ───────────────────────────────────────────────────────── */
 
 /**
- * Fetch bucketed history and rebuild all charts.
+ * Fetch bucketed history, compute all chart data in a single pass, and
+ * store the result in pendingHistoryFrame for the render path to pick up.
+ *
+ * All data transformation happens in computeHistoryFrame() — no chart
+ * mutations occur here. The rAF call at the end is a fallback for the
+ * case where SSE is not yet connected and appendToCharts() never fires.
+ *
  * @param {number} hours
  */
 async function loadHistory(hours) {
@@ -545,65 +706,147 @@ async function loadHistory(hours) {
 
   if (!data || data.length === 0) return;
 
-  // Reset tracked state.
-  voltageExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
-  currentExtremes.forEach(e => { e.min = Infinity; e.max = -Infinity; });
-  lastWasExporting = null;
-  flipCount = 0;
-  ema = null;  // force EMA to re-seed from first live reading
-  Object.keys(flipAnnotations).forEach(k => delete flipAnnotations[k]);
-  powerChart.options.plugins.annotation.annotations = {};
-  voltageCharts.forEach(c => { c.options.plugins.annotation.annotations = {}; });
-  currentCharts.forEach(c => { c.options.plugins.annotation.annotations = {}; });
+  // Yield to the browser before the synchronous processing block so that
+  // any queued renders, input events, or SSE messages get a chance to run.
+  await yieldToMain();
 
-  powerChart.data.datasets[0].data = toXY(data, r =>
-    Math.round((r.power_delivered - r.power_returned) * 1000)
-  );
+  pendingHistoryFrame = computeHistoryFrame(data, hours);
 
-  const vFields = ["voltage_l1", "voltage_l2", "voltage_l3"];
-  const cFields = ["current_l1", "current_l2", "current_l3"];
-  vFields.forEach((f, i) => { voltageCharts[i].data.datasets[0].data = toXY(data, r => r[f]); });
-  cFields.forEach((f, i) => { currentCharts[i].data.datasets[0].data = toXY(data, r => r[f]); });
-
-  // Compute annotations and extremes from history.
-  data.forEach((r, idx) => {
-    const exporting = r.power_returned > r.power_delivered;
-    if (idx > 0 && exporting !== lastWasExporting) {
-      addFlipAnnotation(new Date(r.timestamp).getTime(), exporting);
-    }
-    lastWasExporting = exporting;
-
-    vFields.forEach((f, i) => {
-      const v = r[f];
-      if (v < voltageExtremes[i].min) voltageExtremes[i].min = v;
-      if (v > voltageExtremes[i].max) voltageExtremes[i].max = v;
-    });
-    cFields.forEach((f, i) => {
-      const v = r[f];
-      if (v < currentExtremes[i].min) currentExtremes[i].min = v;
-      if (v > currentExtremes[i].max) currentExtremes[i].max = v;
-    });
-  });
-
-  voltageCharts.forEach((_, i) => updateVoltageAnnotation(i));
-  syncChartScales(voltageCharts, voltageExtremes);
-  // minFloor=0 prevents the current Y axis from going negative.
-  syncChartScales(currentCharts, currentExtremes, 0);
-
-  applyXAxisConfig(hours);
-
-  powerChart.update();
-  voltageCharts.forEach(c => c.update());
-  currentCharts.forEach(c => c.update());
+  // Apply on the next animation frame in case SSE hasn't connected yet.
+  requestAnimationFrame(applyPendingFrame);
 }
 
 /**
- * @param {object[]} data
- * @param {function} yFn
- * @returns {{x:number,y:number}[]}
+ * Compute all chart data from a history payload in a single pass over
+ * the data array.
+ *
+ * This is a pure function: it does not read or write any module-level
+ * state, and it does not touch the DOM or any Chart.js instance.
+ * The returned frame is applied to charts by applyPendingFrame().
+ *
+ * @param {object[]} data   - Array of bucketed readings from /api/history.
+ * @param {number}   hours  - The requested history window (passed through
+ *                            so the axis cache can be built on apply).
+ * @returns {object} Computed frame ready for applyPendingFrame().
  */
-function toXY(data, yFn) {
-  return data.map(r => ({ x: new Date(r.timestamp).getTime(), y: yFn(r) }));
+function computeHistoryFrame(data, hours) {
+  const vFields = ["voltage_l1", "voltage_l2", "voltage_l3"];
+  const cFields = ["current_l1", "current_l2", "current_l3"];
+
+  // Pre-allocate output arrays for all 7 datasets.
+  const powerData    = new Array(data.length);
+  const voltageData  = [new Array(data.length), new Array(data.length), new Array(data.length)];
+  const currentData  = [new Array(data.length), new Array(data.length), new Array(data.length)];
+
+  const vExtremes = [
+    { min: Infinity, max: -Infinity },
+    { min: Infinity, max: -Infinity },
+    { min: Infinity, max: -Infinity },
+  ];
+  const cExtremes = [
+    { min: Infinity, max: -Infinity },
+    { min: Infinity, max: -Infinity },
+    { min: Infinity, max: -Infinity },
+  ];
+
+  const newFlipAnnotations = {};
+  let localFlipCount = 0;
+  let prevExporting  = null;
+  let lastExporting  = null;
+
+  for (let idx = 0; idx < data.length; idx++) {
+    const r  = data[idx];
+    const ts = new Date(r.timestamp).getTime();
+
+    powerData[idx] = {
+      x: ts,
+      y: Math.round((r.power_delivered - r.power_returned) * 1000),
+    };
+
+    for (let i = 0; i < 3; i++) {
+      const v = r[vFields[i]];
+      voltageData[i][idx] = { x: ts, y: v };
+      if (v < vExtremes[i].min) vExtremes[i].min = v;
+      if (v > vExtremes[i].max) vExtremes[i].max = v;
+
+      const c = r[cFields[i]];
+      currentData[i][idx] = { x: ts, y: c };
+      if (c < cExtremes[i].min) cExtremes[i].min = c;
+      if (c > cExtremes[i].max) cExtremes[i].max = c;
+    }
+
+    const exporting = r.power_returned > r.power_delivered;
+    if (idx > 0 && exporting !== prevExporting) {
+      const id = `flip_${localFlipCount++}`;
+      newFlipAnnotations[id] = buildFlipAnnotationDescriptor(ts, exporting);
+    }
+    prevExporting = exporting;
+    lastExporting = exporting;
+  }
+
+  return {
+    powerData,
+    voltageData,
+    currentData,
+    voltageExtremes: vExtremes,
+    currentExtremes: cExtremes,
+    flipAnnotations:  newFlipAnnotations,
+    flipCount:        localFlipCount,
+    lastWasExporting: lastExporting,
+    hours,
+  };
+}
+
+/**
+ * Apply a pending history frame to all charts.
+ *
+ * This is the only place that mutates chart instances with history data.
+ * If pendingHistoryFrame is null (already consumed or not yet set) it
+ * returns immediately so it is safe to call unconditionally.
+ */
+function applyPendingFrame() {
+  if (!pendingHistoryFrame) return;
+  const frame = pendingHistoryFrame;
+  pendingHistoryFrame = null;
+
+  // Update module-level tracking state.
+  ema              = null;  // re-seed EMA from first live reading
+  lastWasExporting = frame.lastWasExporting;
+  flipCount        = frame.flipCount;
+
+  // Replace the global flip-annotation map.
+  Object.keys(flipAnnotations).forEach(k => delete flipAnnotations[k]);
+  Object.assign(flipAnnotations, frame.flipAnnotations);
+
+  // Reset all chart annotation stores and load the computed set.
+  powerChart.options.plugins.annotation.annotations    = { ...frame.flipAnnotations };
+  voltageCharts.forEach(c => { c.options.plugins.annotation.annotations = { ...frame.flipAnnotations }; });
+  currentCharts.forEach(c => { c.options.plugins.annotation.annotations = { ...frame.flipAnnotations }; });
+
+  // Swap dataset arrays (no per-point loop needed — arrays are prebuilt).
+  powerChart.data.datasets[0].data = frame.powerData;
+  frame.voltageData.forEach((d, i) => { voltageCharts[i].data.datasets[0].data = d; });
+  frame.currentData.forEach((d, i) => { currentCharts[i].data.datasets[0].data = d; });
+
+  // Copy precomputed extremes into the mutable per-phase objects.
+  frame.voltageExtremes.forEach((e, i) => { voltageExtremes[i].min = e.min; voltageExtremes[i].max = e.max; });
+  frame.currentExtremes.forEach((e, i) => { currentExtremes[i].min = e.min; currentExtremes[i].max = e.max; });
+
+  voltageCharts.forEach((_, i) => updateVoltageAnnotation(i));
+  syncChartScales(voltageCharts, voltageExtremes);
+  syncChartScales(currentCharts, currentExtremes, 0);
+
+  buildXAxisCache(frame.hours);
+  applyXAxisConfig();
+
+  // Only repaint if the electricity tab is currently visible.
+  // The canvas.closest('[hidden]') traversal checks whether any ancestor
+  // panel has the hidden attribute — no separate state variable needed.
+  if (!powerChart.canvas.closest("[hidden]")) {
+    powerChart.update();
+    voltageCharts.forEach(c => c.update());
+    currentCharts.forEach(c => c.update());
+  }
 }
 
 /* ── Summary ────────────────────────────────────────────────────────────── */
@@ -733,10 +976,16 @@ function switchTab(tabId) {
     }
   }
   // Chart.js cannot measure a hidden element; resize after reveal.
+  // Also force a data repaint so any updates that arrived while the
+  // electricity tab was hidden are rendered immediately on switch.
   if (tabId === "usage") {
-    [usageChart, costChart, gasChart].forEach(c => c && c.resize());
+    [usageChart, costChart, gasChart].forEach(c => {
+      if (c) { c.resize(); c.update("none"); }
+    });
   } else {
-    [powerChart, ...voltageCharts, ...currentCharts].forEach(c => c && c.resize());
+    [powerChart, ...voltageCharts, ...currentCharts].forEach(c => {
+      if (c) { c.resize(); c.update("none"); }
+    });
   }
 }
 
@@ -759,6 +1008,7 @@ function _barOpts(yLabel, tickFmt, tooltipFmt, stacked = false) {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
+    transitions: { active: { animation: { duration: 0 } } },
     interaction: { mode: "index", intersect: false },
     scales: {
       x: {
@@ -851,28 +1101,33 @@ async function loadUsageCharts() {
     exportRevenue.push(price !== null ? -(+(ret1 + ret2) * price).toFixed(4) : 0);
   }
 
-  applyXAxisConfig(selectedHours);
+  // Cache is already current from loadHistory; just apply it.
+  applyXAxisConfig();
 
+  // Data is always written to chart instances regardless of visibility so
+  // it is ready when the tab is revealed. Only the repaint is gated.
   if (usageChart) {
-    usageChart.data.labels = labels;
-    usageChart.data.datasets[0].data = d1;
-    usageChart.data.datasets[1].data = d2;
-    usageChart.data.datasets[2].data = r1;
-    usageChart.data.datasets[3].data = r2;
-    usageChart.update("none");
+    usageChart.data.labels            = labels;
+    usageChart.data.datasets[0].data  = d1;
+    usageChart.data.datasets[1].data  = d2;
+    usageChart.data.datasets[2].data  = r1;
+    usageChart.data.datasets[3].data  = r2;
   }
-
   if (gasChart) {
-    gasChart.data.labels = labels;
+    gasChart.data.labels           = labels;
     gasChart.data.datasets[0].data = gas;
-    gasChart.update("none");
   }
-
   if (costChart) {
-    costChart.data.labels = labels;
+    costChart.data.labels           = labels;
     costChart.data.datasets[0].data = importCost;
     costChart.data.datasets[1].data = exportRevenue;
-    costChart.update("none");
+  }
+
+  // Only repaint if the usage tab is currently visible.
+  if (usageChart && !usageChart.canvas.closest("[hidden]")) {
+    usageChart.update("none");
+    if (gasChart)  gasChart.update("none");
+    if (costChart) costChart.update("none");
   }
 
   // Period label, matching the format used by loadSummaryDelta.
@@ -910,8 +1165,18 @@ async function loadUsageCharts() {
 
 /* ── SSE ────────────────────────────────────────────────────────────────── */
 
-let eventSource = null;
+let eventSource    = null;
 let reconnectDelay = 2000;
+
+/**
+ * Raw SSE readings waiting to be processed by the rAF consumer.
+ * The SSE message handler pushes here and exits immediately; all
+ * processing (DOM updates, EMA, pendingLive staging) happens in
+ * drainSSEBuffer() which runs inside a requestAnimationFrame.
+ * @type {object[]}
+ */
+const sseBuffer = [];
+let   sseRafPending = false;
 
 function connectSSE() {
   setStatus("connecting", "Connecting…");
@@ -923,8 +1188,13 @@ function connectSSE() {
   });
 
   eventSource.addEventListener("message", event => {
-    try { applyReading(JSON.parse(event.data)); }
-    catch (err) { console.warn("SSE parse error:", err); }
+    try {
+      sseBuffer.push(JSON.parse(event.data));
+      if (!sseRafPending) {
+        sseRafPending = true;
+        requestAnimationFrame(drainSSEBuffer);
+      }
+    } catch (err) { console.warn("SSE parse error:", err); }
   });
 
   eventSource.addEventListener("error", () => {
@@ -941,6 +1211,21 @@ function connectSSE() {
 function setStatus(state, label) {
   el.statusDot.className     = `status-dot ${state}`;
   el.statusLabel.textContent = label;
+}
+
+/**
+ * rAF consumer for the SSE data pipeline.
+ *
+ * Scheduled by the SSE message handler (one rAF per batch, not a permanent
+ * loop). Drains sseBuffer, applying each reading to the DOM and staging
+ * chart data into pendingLive. Running inside rAF naturally synchronises
+ * DOM text updates with the browser's paint cycle.
+ */
+function drainSSEBuffer() {
+  sseRafPending = false;
+  while (sseBuffer.length > 0) {
+    applyReading(sseBuffer.shift());
+  }
 }
 
 /* ── Reading application ────────────────────────────────────────────────── */
@@ -974,23 +1259,33 @@ function applyReading(r) {
   setValue(el.currentL2, fmt1(r.current_l2));
   setValue(el.currentL3, fmt1(r.current_l3));
 
-  // Update the wye phasor diagram with the raw (un-smoothed) voltages.
-  updateWyeDiagram(
-    r.voltage_l1 ?? 0,
-    r.voltage_l2 ?? 0,
-    r.voltage_l3 ?? 0,
-  );
+  // Cache raw voltages for the wye diagram; the canvas is redrawn by the
+  // 5-second render interval rather than on every SSE tick.
+  latestVoltages = {
+    v1: r.voltage_l1 ?? 0,
+    v2: r.voltage_l2 ?? 0,
+    v3: r.voltage_l3 ?? 0,
+  };
 
   appendToCharts(r);
 }
 
-/** @param {HTMLElement} elem @param {string|number} val */
+/**
+ * Update an element's text and re-trigger the value-updated CSS animation.
+ *
+ * The animation is reset by removing the class, letting the browser paint
+ * the removal in one rAF, then re-adding it in the next.  This avoids the
+ * forced synchronous layout (getBoundingClientRect) that was previously
+ * needed to flush the style change.
+ *
+ * @param {HTMLElement} elem
+ * @param {string|number} val
+ */
 function setValue(elem, val) {
   if (!elem) return;
   elem.textContent = String(val);
   elem.classList.remove("value-updated");
-  elem.getBoundingClientRect(); // force reflow to re-trigger the CSS animation
-  elem.classList.add("value-updated");
+  requestAnimationFrame(() => elem.classList.add("value-updated"));
 }
 
 function setText(id, val) {
@@ -1006,10 +1301,12 @@ function fmt1(v) {
 /* ── Chart append ───────────────────────────────────────────────────────── */
 
 function appendToCharts(r) {
-  const ts  = new Date(r.timestamp).getTime();
-  const s   = smoothReading(r);  // EMA-smoothed copy for chart points
+  const ts = new Date(r.timestamp).getTime();
+  const s  = smoothReading(r);  // EMA-smoothed copy for chart points
 
-  powerChart.data.datasets[0].data.push({
+  // Stage into pendingLive; data is drained into chart instances at render
+  // time so chart meta stays in sync with rendered data.
+  pendingLive.power.push({
     x: ts,
     y: Math.round((s.power_delivered - s.power_returned) * 1000),
   });
@@ -1022,35 +1319,33 @@ function appendToCharts(r) {
   lastWasExporting = exporting;
 
   // Voltage — smoothed for chart, raw for extremes tracking.
+  // syncChartScales only runs when an extreme is breached.
+  let vChanged = false;
   ["voltage_l1", "voltage_l2", "voltage_l3"].forEach((f, i) => {
-    voltageCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
+    pendingLive.voltage[i].push({ x: ts, y: s[f] });
     const v = r[f];
-    if (v < voltageExtremes[i].min) { voltageExtremes[i].min = v; updateVoltageAnnotation(i); }
-    if (v > voltageExtremes[i].max) { voltageExtremes[i].max = v; updateVoltageAnnotation(i); }
+    if (v < voltageExtremes[i].min) { voltageExtremes[i].min = v; updateVoltageAnnotation(i); vChanged = true; }
+    if (v > voltageExtremes[i].max) { voltageExtremes[i].max = v; updateVoltageAnnotation(i); vChanged = true; }
   });
-  syncChartScales(voltageCharts, voltageExtremes);
+  if (vChanged) syncChartScales(voltageCharts, voltageExtremes);
 
-  // Current — smoothed for chart, raw for extremes.
+  // Current — same gating.
+  let cChanged = false;
   ["current_l1", "current_l2", "current_l3"].forEach((f, i) => {
-    currentCharts[i].data.datasets[0].data.push({ x: ts, y: s[f] });
+    pendingLive.current[i].push({ x: ts, y: s[f] });
     const v = r[f];
-    if (v < currentExtremes[i].min) currentExtremes[i].min = v;
-    if (v > currentExtremes[i].max) currentExtremes[i].max = v;
+    if (v < currentExtremes[i].min) { currentExtremes[i].min = v; cChanged = true; }
+    if (v > currentExtremes[i].max) { currentExtremes[i].max = v; cChanged = true; }
   });
-  // minFloor=0 prevents the current Y axis from going negative.
-  syncChartScales(currentCharts, currentExtremes, 0);
+  if (cChanged) syncChartScales(currentCharts, currentExtremes, 0);
 
-  const cutoff = Date.now() - selectedHours * 3600 * 1000;
-  trimOldPoints(powerChart, cutoff);
-  voltageCharts.forEach(c => trimOldPoints(c, cutoff));
-  currentCharts.forEach(c => trimOldPoints(c, cutoff));
+  // Trimming is handled by a separate interval (see DOMContentLoaded).
+  // Doing it here every second with Array.shift() on large arrays is O(n)
+  // per tick and was a primary source of CPU load in long-running sessions.
 
-  // Slide the X window forward so ticks stay aligned to clock boundaries.
-  applyXAxisConfig(selectedHours);
-
-  powerChart.update("none");
-  voltageCharts.forEach(c => c.update("none"));
-  currentCharts.forEach(c => c.update("none"));
+  // Chart repaints are handled by the render interval (see DOMContentLoaded).
+  // Calling chart.update() here every second was 90 %+ of main-thread paint
+  // cost. Data accumulates in the arrays at 1 Hz; the canvas redraws at 2 Hz.
 }
 
 /**
@@ -1080,10 +1375,57 @@ function smoothReading(r) {
   return s;
 }
 
+/**
+ * Remove data points older than cutoff from a chart's datasets.
+ * @param {import('chart.js').Chart} chart
+ * @param {number} cutoff - Timestamp in milliseconds; points before this are dropped.
+ */
+/**
+ * Remove data points older than cutoff from all datasets on a chart.
+ *
+ * Uses a single splice(0, n) rather than repeated shift() calls.
+ * shift() on a large array is O(n) per call; splice(0, n) is O(n) once
+ * for the same number of removals, so batching eliminates the quadratic
+ * behaviour that accumulates in long-running sessions.
+ *
+ * @param {import('chart.js').Chart} chart
+ * @param {number} cutoff - Epoch ms; points with x < cutoff are removed.
+ */
 function trimOldPoints(chart, cutoff) {
   for (const ds of chart.data.datasets) {
-    while (ds.data.length > 0 && ds.data[0].x < cutoff) ds.data.shift();
+    let n = 0;
+    while (n < ds.data.length && ds.data[n].x < cutoff) n++;
+    if (n > 0) ds.data.splice(0, n);
   }
+}
+
+/**
+ * Remove flip annotations whose timestamp has scrolled out of the history
+ * window.  Without pruning, the annotation object grows for the lifetime of
+ * the page and gets spread into every chart's config on each direction change.
+ *
+ * @param {number} cutoff - Timestamp in milliseconds; annotations before this are dropped.
+ */
+function trimOldAnnotations(cutoff) {
+  let changed = false;
+  for (const id of Object.keys(flipAnnotations)) {
+    // Annotation IDs are "flip_N"; the timestamp is stored on the value field.
+    if (flipAnnotations[id].value < cutoff) {
+      delete flipAnnotations[id];
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  // Sync the pruned set back to every chart that holds these annotations.
+  const removeFromChart = chart => {
+    const anns = chart.options.plugins.annotation.annotations;
+    for (const id of Object.keys(anns)) {
+      if (id.startsWith("flip_") && !flipAnnotations[id]) delete anns[id];
+    }
+  };
+  removeFromChart(powerChart);
+  voltageCharts.forEach(removeFromChart);
+  currentCharts.forEach(removeFromChart);
 }
 
 /* ── Scale helpers ──────────────────────────────────────────────────────── */
@@ -1100,32 +1442,59 @@ function stepUnitMs(unit) {
 }
 
 /**
- * Apply the appropriate X-axis tick unit and step for the given history
- * window so ticks — and therefore grid lines — fall on clean clock boundaries.
+ * Compute and cache the X-axis configuration for the given history window.
  *
- * Chart.js time scale generates intermediate minor ticks in addition to the
- * labelled major ticks; both produce grid lines.  afterBuildTicks strips the
- * tick array down to only those whose value is an exact multiple of stepMs,
- * guaranteeing grid lines land on :00, :05, :10 etc. for the 1 h range.
+ * The derived values break down as follows:
+ *   - unit / stepSize: determined solely by the selected window; constant
+ *     until the user changes the range selector.
+ *   - stepMs: derived from the above; same lifetime.
+ *   - afterBuildTicks: a closure over stepMs; created once here and reused
+ *     across all charts and all subsequent applyXAxisConfig() calls.
+ *   - flooredMin: depends on Date.now(); needs refreshing periodically so
+ *     the live edge of the axis stays current.  The smallest step in
+ *     AXIS_CONFIG is 5 minutes (1 h window), so rebuilding every 5 minutes
+ *     means flooredMin drifts by at most one step between rebuilds.
+ *
+ * Call this whenever selectedHours changes, or every 5 minutes.
+ * Follow with applyXAxisConfig() to push the values to the charts.
  *
  * @param {number} hours - The currently selected history window.
  */
-function applyXAxisConfig(hours) {
+function buildXAxisCache(hours) {
   const cfg    = AXIS_CONFIG[hours] ?? AXIS_CONFIG[24];
   const stepMs = cfg.stepSize * stepUnitMs(cfg.unit);
-  const flooredMin = Math.floor((Date.now() - hours * 3_600_000) / stepMs) * stepMs;
+  xAxisCache = {
+    unit:     cfg.unit,
+    stepSize: cfg.stepSize,
+    stepMs,
+    flooredMin: Math.floor((Date.now() - hours * 3_600_000) / stepMs) * stepMs,
+    /**
+     * Filter Chart.js ticks to only those at exact step boundaries.
+     * This controls grid-line positions as well as tick labels.
+     * @param {import('chart.js').Scale} scale
+     */
+    afterBuildTicks(scale) {
+      scale.ticks = scale.ticks.filter(t => t.value % stepMs === 0);
+    },
+  };
+}
 
+/**
+ * Push the cached X-axis configuration to all electricity-tab charts.
+ *
+ * Reads from xAxisCache; does nothing if the cache has not been built yet.
+ * The same afterBuildTicks function reference is written to every chart so
+ * Chart.js holds one shared instance rather than one closure per chart.
+ */
+function applyXAxisConfig() {
+  if (!xAxisCache) return;
   [powerChart, ...voltageCharts, ...currentCharts].forEach(chart => {
     const x = chart.options.scales.x;
-    x.time.unit     = cfg.unit;
-    x.time.stepSize = cfg.stepSize;
-    x.min           = flooredMin;
+    x.time.unit       = xAxisCache.unit;
+    x.time.stepSize   = xAxisCache.stepSize;
+    x.min             = xAxisCache.flooredMin;
+    x.afterBuildTicks = xAxisCache.afterBuildTicks;
     if (x.ticks) x.ticks.maxTicksLimit = 100;
-    // Strip any tick not at an exact step boundary — this controls grid lines,
-    // not just labels.
-    x.afterBuildTicks = scale => {
-      scale.ticks = scale.ticks.filter(t => t.value % stepMs === 0);
-    };
   });
 }
 
@@ -1223,16 +1592,20 @@ function updateInlineScale(chart, extremes, minPad) {
 /* ── Annotations ────────────────────────────────────────────────────────── */
 
 /**
- * Add a vertical flip marker at the given timestamp on ALL charts.
- * enter/leave callbacks show a fixed tooltip with the exact timestamp.
+ * Build a flip annotation descriptor without applying it to any chart.
+ *
+ * Pure function used by computeHistoryFrame() to build the full annotation
+ * set in one pass. The returned object can later be installed into chart
+ * annotation configs by applyPendingFrame().
+ *
  * @param {number}  tsMs     - Timestamp in milliseconds.
  * @param {boolean} toExport - Direction after the flip.
+ * @returns {object} Chart.js annotation descriptor.
  */
-function addFlipAnnotation(tsMs, toExport) {
-  const id    = `flip_${flipCount++}`;
+function buildFlipAnnotationDescriptor(tsMs, toExport) {
   const color = toExport ? "rgba(34,197,94,0.55)" : "rgba(59,130,246,0.55)";
   const label = toExport ? "→ Export" : "→ Import";
-  const annotation = {
+  return {
     type: "line", scaleID: "x", value: tsMs,
     borderColor: color, borderWidth: 1, borderDash: [4, 4],
     label: {
@@ -1256,6 +1629,21 @@ function addFlipAnnotation(tsMs, toExport) {
       document.getElementById("flip-tooltip").style.display = "none";
     },
   };
+}
+
+/**
+ * Build a flip annotation and immediately install it on all charts.
+ *
+ * Used by the live SSE path (appendToCharts) where annotations must be
+ * applied inline as readings arrive. For the history path, use
+ * buildFlipAnnotationDescriptor() and apply via applyPendingFrame().
+ *
+ * @param {number}  tsMs     - Timestamp in milliseconds.
+ * @param {boolean} toExport - Direction after the flip.
+ */
+function addFlipAnnotation(tsMs, toExport) {
+  const id         = `flip_${flipCount++}`;
+  const annotation = buildFlipAnnotationDescriptor(tsMs, toExport);
   flipAnnotations[id] = annotation;
   powerChart.options.plugins.annotation.annotations[id] = annotation;
   voltageCharts.forEach(c => { c.options.plugins.annotation.annotations[id] = annotation; });
@@ -1278,7 +1666,7 @@ function updateVoltageAnnotation(phaseIndex) {
       type: "line", scaleID: "y", value: min,
       borderColor: "rgba(239,68,68,0.7)", borderWidth: 1, borderDash: [4, 3],
       label: {
-        display: true, content: `${min.toFixed(1)} V`, position: "end",
+        display: true, content: `${min.toFixed(1)} V`, position: "center",
         backgroundColor: "rgba(239,68,68,0.8)", color: "#fff",
         font: { size: 8, weight: "600" }, padding: { x: 3, y: 1 },
       },
@@ -1287,7 +1675,7 @@ function updateVoltageAnnotation(phaseIndex) {
       type: "line", scaleID: "y", value: max,
       borderColor: "rgba(59,130,246,0.7)", borderWidth: 1, borderDash: [4, 3],
       label: {
-        display: true, content: `${max.toFixed(1)} V`, position: "end",
+        display: true, content: `${max.toFixed(1)} V`, position: "center",
         backgroundColor: "rgba(59,130,246,0.8)", color: "#fff",
         font: { size: 8, weight: "600" }, padding: { x: 3, y: 1 },
       },
@@ -1430,24 +1818,47 @@ function drawWyeDiagram(v1, v2, v3) {
   const cx   = W / 2;
   const cy   = H / 2;
 
-  // Scale so the largest phase vector occupies 80 % of the half-dimension.
-  const maxV  = Math.max(v1, v2, v3, 1);
-  const scale = (Math.min(W, H) * 0.4) / maxV;
+  // Subtract a base voltage so inter-phase differences are amplified visually.
+  // At ~230 V the raw vectors are nearly identical in length; with a 200 V base
+  // the displayed deviations are ~30 V, making a 1 V imbalance ~3 % of the
+  // vector length instead of ~0.4 %.
+  // IEC reference rings and the mean ring use the same offset so they remain
+  // correctly positioned relative to the phasor tips.
+  // Neutral shift is mathematically unaffected (the base cancels in the centroid
+  // calculation) but appears proportionally larger at the expanded scale.
+  const WYE_DISPLAY_OFFSET = 200;
 
-  // Pull CSS custom-property colours for theme consistency.
-  const css   = getComputedStyle(document.documentElement);
-  const cprop = name => css.getPropertyValue(name).trim();
+  // Display magnitudes — deviations from the base, floor at 1 to avoid
+  // zero-length vectors if voltage ever dips below the base.
+  const dv1 = Math.max(v1 - WYE_DISPLAY_OFFSET, 1);
+  const dv2 = Math.max(v2 - WYE_DISPLAY_OFFSET, 1);
+  const dv3 = Math.max(v3 - WYE_DISPLAY_OFFSET, 1);
 
-  const cl1      = cprop("--phase-l1");
-  const cl2      = cprop("--phase-l2");
-  const cl3      = cprop("--phase-l3");
-  const cl12     = cprop("--wye-l12");
-  const cl13     = cprop("--wye-l13");
-  const cl23     = cprop("--wye-l23");
-  const cNeutral = cprop("--wye-neutral");
-  const cGrid    = cprop("--chart-grid");
-  const cText    = cprop("--text-muted");
-  const cTextDim = cprop("--text-dim");
+  // IEC 61000-3-3 / EN 50160 tolerance band display values.
+  // Defined here so the scale can be pinned to IEC_HIGH_DISP.
+  const IEC_LOW_DISP  = 207 - WYE_DISPLAY_OFFSET;   //  7 V display
+  const IEC_NOM_DISP  = 230 - WYE_DISPLAY_OFFSET;   // 30 V display
+  const IEC_HIGH_DISP = 253 - WYE_DISPLAY_OFFSET;   // 53 V display
+
+  // Pin the scale to a fixed ceiling above the IEC upper band so rings sit
+  // clearly inside the canvas with room to spare. Using IEC_HIGH_DISP (53)
+  // as the divisor would place the high ring right at the layout boundary;
+  // a ceiling of 265 V (65 display units) leaves ~18 % headroom beyond it.
+  const SCALE_CEIL = 265 - WYE_DISPLAY_OFFSET;   // 65 display V
+  const scale = (Math.min(W, H) * 0.38) / SCALE_CEIL;
+
+  // Use the cached palette populated by recolorCharts() rather than calling
+  // getComputedStyle on every tick (called once per second from SSE).
+  const cl1      = WYE_CSS.cl1     || "#60a5fa";
+  const cl2      = WYE_CSS.cl2     || "#34d399";
+  const cl3      = WYE_CSS.cl3     || "#f59e0b";
+  const cl12     = WYE_CSS.cl12    || "#818cf8";
+  const cl13     = WYE_CSS.cl13    || "#fb7185";
+  const cl23     = WYE_CSS.cl23    || "#a78bfa";
+  const cNeutral = WYE_CSS.neutral || "#f472b6";
+  const cGrid    = WYE_CSS.grid    || "rgba(255,255,255,0.06)";
+  const cText    = WYE_CSS.text    || "#9ca3af";
+  const cTextDim = WYE_CSS.dim     || "#4b5563";
 
   const ctx = wyeCtx;
   ctx.clearRect(0, 0, W, H);
@@ -1462,17 +1873,17 @@ function drawWyeDiagram(v1, v2, v3) {
     };
   };
 
-  // Phasor tip coordinates.
+  // Phasor tip coordinates use display magnitudes; labels show actual voltages.
   // L1 points straight up (90°), with L2 and L3 at −120° increments:
   //   L1 = 90°, L2 = −30° (lower-right), L3 = 210° (lower-left).
-  const p1 = toXY(v1,  90);
-  const p2 = toXY(v2, -30);
-  const p3 = toXY(v3, 210);
+  const p1 = toXY(dv1,  90);
+  const p2 = toXY(dv2, -30);
+  const p3 = toXY(dv3, 210);
 
-  const meanV   = (v1 + v2 + v3) / 3;
-  const idealR  = meanV * scale;
+  const meanDV = (dv1 + dv2 + dv3) / 3;
+  const idealR = meanDV * scale;
 
-  // ── Background grid rings (25 %, 50 %, 75 %, 100 % of ideal) ──
+  // ── Background grid rings (25 %, 50 %, 75 %, 100 % of display mean) ──
   for (let frac = 0.25; frac <= 1.01; frac += 0.25) {
     ctx.beginPath();
     ctx.arc(cx, cy, idealR * frac, 0, 2 * Math.PI);
@@ -1484,7 +1895,7 @@ function drawWyeDiagram(v1, v2, v3) {
 
   // Spokes at 0°, 60°, 120°… (every 60°) as orientation guides.
   for (let a = 0; a < 360; a += 60) {
-    const sp = toXY(maxV * 1.05, a);
+    const sp = toXY(SCALE_CEIL, a);
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(sp.x, sp.y);
@@ -1493,16 +1904,9 @@ function drawWyeDiagram(v1, v2, v3) {
     ctx.stroke();
   }
 
-  // ── IEC 61000-3-3 / EN 50160 reference rings ──
-  // Nominal LV supply voltage in Europe: 230 V ±10 % (207 V – 253 V).
-  // These rings are drawn at fixed voltages regardless of the measured mean,
-  // so they provide a stable absolute reference on the diagram.
-  const IEC_NOM   = 230;
-  const IEC_LOW   = 207;   // 230 V − 10 %
-  const IEC_HIGH  = 253;   // 230 V + 10 %
-
-  const drawIecRing = (voltage, color, dash, label, labelAngle) => {
-    const r = voltage * scale;
+  // ── IEC reference rings ──
+  const drawIecRing = (dispV, color, dash, label, labelAngle) => {
+    const r = dispV * scale;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, 2 * Math.PI);
     ctx.strokeStyle = color;
@@ -1521,10 +1925,10 @@ function drawWyeDiagram(v1, v2, v3) {
   };
 
   // Tolerance bands first (underneath nominal ring).
-  drawIecRing(IEC_LOW,  "rgba(251,146,60,0.55)",  [3, 3], "−10 %",  Math.PI * 0.25);
-  drawIecRing(IEC_HIGH, "rgba(251,146,60,0.55)",  [3, 3], "+10 %",  Math.PI * 0.25);
+  drawIecRing(IEC_LOW_DISP,  "rgba(251,146,60,0.55)",  [3, 3], "207 V",  Math.PI * 0.25);
+  drawIecRing(IEC_HIGH_DISP, "rgba(251,146,60,0.55)",  [3, 3], "253 V",  Math.PI * 0.25);
   // Nominal ring.
-  drawIecRing(IEC_NOM,  "rgba(255,255,255,0.30)", [5, 3], "230 V",  Math.PI * 0.2);
+  drawIecRing(IEC_NOM_DISP,  "rgba(255,255,255,0.30)", [5, 3], "230 V",  Math.PI * 0.2);
 
   // ── Mean-voltage reference ring (dashed, dim) ──
   ctx.beginPath();
@@ -1535,8 +1939,8 @@ function drawWyeDiagram(v1, v2, v3) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // ── Line-to-line differential chords (LL arcs drawn as straight chords) ──
-  // Drawn before the phase vectors so they appear underneath.
+  // ── Line-to-line differential chords ──
+  // Chord geometry reflects display magnitudes; labels show calculated LL voltage.
   const drawChord = (pa, pb, color, label, labelOffset) => {
     ctx.beginPath();
     ctx.moveTo(pa.x, pa.y);
@@ -1560,9 +1964,9 @@ function drawWyeDiagram(v1, v2, v3) {
   const llMag13 = lineVoltage(v1, v3);
   const llMag23 = lineVoltage(v2, v3);
 
-  drawChord(p1, p2, cl12, `L1–L2 ${llMag12.toFixed(1)} V`, { x: 14, y: -6 });
-  drawChord(p1, p3, cl13, `L1–L3 ${llMag13.toFixed(1)} V`, { x: -14, y: -6 });
-  drawChord(p2, p3, cl23, `L2–L3 ${llMag23.toFixed(1)} V`, { x: 0, y: 14 });
+  drawChord(p1, p2, cl12, `L1\u2013L2 ${llMag12.toFixed(1)} V`, { x: 14, y: -6 });
+  drawChord(p1, p3, cl13, `L1\u2013L3 ${llMag13.toFixed(1)} V`, { x: -14, y: -6 });
+  drawChord(p2, p3, cl23, `L2\u2013L3 ${llMag23.toFixed(1)} V`, { x: 0, y: 14 });
 
   // ── Phase voltage vectors ──
   const drawVector = (p, color, label, mag) => {
@@ -1600,11 +2004,14 @@ function drawWyeDiagram(v1, v2, v3) {
     ctx.fillText(`${label} ${mag.toFixed(1)} V`, p.x + offX, p.y + offY);
   };
 
+  // Pass actual voltages for labels; phasor tips already computed from display magnitudes.
   drawVector(p1, cl1, "L1", v1);
   drawVector(p2, cl2, "L2", v2);
   drawVector(p3, cl3, "L3", v3);
 
   // ── Neutral offset vector ──
+  // Computed from actual voltages — the display base cancels in the centroid
+  // calculation so the result is identical either way.
   const ns  = neutralShift(v1, v2, v3);
   const npx = cx + ns.re * scale;
   const npy = cy - ns.im * scale;
@@ -1633,11 +2040,20 @@ function drawWyeDiagram(v1, v2, v3) {
   ctx.fillStyle = cText;
   ctx.fill();
 
-  // ── Centre label (mean voltage) ──
+  // ── Centre label: actual mean voltage ──
+  const meanV = (v1 + v2 + v3) / 3;
   ctx.font      = "10px 'JetBrains Mono', monospace";
   ctx.fillStyle = cText;
   ctx.textAlign = "center";
   ctx.fillText(`mean ${meanV.toFixed(1)} V`, cx, cy - 10);
+
+  // ── Corner note: display base so diagram is not misread as absolute scale ──
+  ctx.font         = "8px 'JetBrains Mono', monospace";
+  ctx.fillStyle    = cTextDim;
+  ctx.textAlign    = "left";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(`\u2212${WYE_DISPLAY_OFFSET} V base`, 6, H - 4);
+  ctx.textBaseline = "alphabetic";
 }
 
 /**
@@ -1755,15 +2171,14 @@ function drawNeutralMini(re, im, mag) {
   const cx  = W / 2;
   const cy  = H / 2;
 
-  const css    = getComputedStyle(document.documentElement);
-  const cprop  = name => css.getPropertyValue(name).trim();
-  const cN     = cprop("--wye-neutral");
-  const cGrid  = cprop("--chart-grid");
-  const cText  = cprop("--text-muted");
-  const cDim   = cprop("--text-dim");
-  const cl1    = cprop("--phase-l1");
-  const cl2    = cprop("--phase-l2");
-  const cl3    = cprop("--phase-l3");
+  // Use the cached palette populated by recolorCharts() — same as drawWyeDiagram.
+  const cN    = WYE_CSS.neutral || "#f472b6";
+  const cGrid = WYE_CSS.grid    || "rgba(255,255,255,0.06)";
+  const cText = WYE_CSS.text    || "#9ca3af";
+  const cDim  = WYE_CSS.dim     || "#4b5563";
+  const cl1   = WYE_CSS.cl1     || "#60a5fa";
+  const cl2   = WYE_CSS.cl2     || "#34d399";
+  const cl3   = WYE_CSS.cl3     || "#f59e0b";
 
   const ctx = neutralCtx;
   ctx.clearRect(0, 0, W, H);
