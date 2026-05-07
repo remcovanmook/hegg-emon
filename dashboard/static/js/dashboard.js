@@ -238,6 +238,8 @@ const currentExtremes = [
 ];
 
 let lastWasExporting  = null;
+let liveFlipState     = null;
+let liveFlipTs        = 0;
 let flipCount         = 0;
 let selectedHours     = 24;
 
@@ -658,10 +660,10 @@ function initUsageCharts() {
     data: {
       labels: [],
       datasets: [
-        { label: "Import T1 (kWh)", data: [], backgroundColor: COLORS.delivered + "cc", borderRadius: 3, borderSkipped: false },
-        { label: "Import T2 (kWh)", data: [], backgroundColor: COLORS.delivered + "55", borderRadius: 3, borderSkipped: false },
-        { label: "Export T1 (kWh)", data: [], backgroundColor: COLORS.returned  + "cc", borderRadius: 3, borderSkipped: false },
-        { label: "Export T2 (kWh)", data: [], backgroundColor: COLORS.returned  + "55", borderRadius: 3, borderSkipped: false },
+        { label: "Import T1 (kWh)", data: [], backgroundColor: COLORS.delivered + "55", borderRadius: 3, borderSkipped: false },
+        { label: "Import T2 (kWh)", data: [], backgroundColor: COLORS.delivered + "cc", borderRadius: 3, borderSkipped: false },
+        { label: "Export T1 (kWh)", data: [], backgroundColor: COLORS.returned  + "55", borderRadius: 3, borderSkipped: false },
+        { label: "Export T2 (kWh)", data: [], backgroundColor: COLORS.returned  + "cc", borderRadius: 3, borderSkipped: false },
       ],
     },
     options: _barOpts("kWh", v => `${v.toFixed(3)} kWh`, ctx => `${ctx.dataset.label}: ${Math.abs(ctx.parsed.y).toFixed(4)} kWh`, true),
@@ -790,6 +792,8 @@ function computeHistoryFrame(data, hours) {
   let localFlipCount = 0;
   let prevExporting  = null;
   let lastExporting  = null;
+  let histFlipState  = null;
+  let histFlipTs     = 0;
 
   for (let idx = 0; idx < data.length; idx++) {
     const r  = data[idx];
@@ -813,12 +817,26 @@ function computeHistoryFrame(data, hours) {
     }
 
     const exporting = r.power_returned > r.power_delivered;
-    if (idx > 0 && exporting !== prevExporting) {
-      const id = `flip_${localFlipCount++}`;
-      newFlipAnnotations[id] = buildFlipAnnotationDescriptor(ts, exporting);
+    if (idx === 0) {
+      prevExporting = exporting;
+      lastExporting = exporting;
+    } else if (exporting !== prevExporting) {
+      if (histFlipState === exporting) {
+        if (ts - histFlipTs >= 10000) {
+          const id = `flip_${localFlipCount++}`;
+          newFlipAnnotations[id] = buildFlipAnnotationDescriptor(histFlipTs, exporting);
+          prevExporting = exporting;
+          lastExporting = exporting;
+          histFlipState = null;
+        }
+      } else {
+        histFlipState = exporting;
+        histFlipTs = ts;
+      }
+    } else {
+      histFlipState = null;
+      lastExporting = exporting;
     }
-    prevExporting = exporting;
-    lastExporting = exporting;
   }
 
   return {
@@ -1397,12 +1415,12 @@ async function loadForecastChart() {
     }
 
     const sortedPrices = elecData.map(d => d.y).sort((a,b) => a - b);
-    const p10 = sortedPrices[Math.max(0, Math.floor(sortedPrices.length * 0.1) - 1)] || 0;
-    const p90 = sortedPrices[Math.min(sortedPrices.length - 1, Math.floor(sortedPrices.length * 0.9))] || 0;
+    const p15 = sortedPrices[Math.max(0, Math.floor(sortedPrices.length * 0.15) - 1)] || 0;
+    const p85 = sortedPrices[Math.min(sortedPrices.length - 1, Math.floor(sortedPrices.length * 0.85))] || 0;
 
     const bgColors = elecData.map(d => {
-      if (d.y >= p90) return "#3b82f6cc"; // Blue
-      if (d.y <= p10) return "#10b981cc"; // Green
+      if (d.y >= p85) return "#3b82f6cc"; // Blue
+      if (d.y <= p15) return "#10b981cc"; // Green
       return "#6b749088";                 // Neutral grey
     });
 
@@ -1616,12 +1634,25 @@ function appendToCharts(r) {
     y: Math.round((s.power_delivered - s.power_returned) * 1000),
   });
 
-  // Use raw r for flip detection — direction changes must be immediate.
+  // Use raw r for flip detection — debounced by 10 seconds.
   const exporting = r.power_returned > r.power_delivered;
-  if (lastWasExporting !== null && exporting !== lastWasExporting) {
-    addFlipAnnotation(ts, exporting);
+  if (lastWasExporting === null) {
+    lastWasExporting = exporting;
+  } else if (exporting !== lastWasExporting) {
+    if (liveFlipState === exporting) {
+      if (ts - liveFlipTs >= 10000) {
+        addFlipAnnotation(liveFlipTs, exporting);
+        lastWasExporting = exporting;
+        liveFlipState = null;
+      }
+    } else {
+      liveFlipState = exporting;
+      liveFlipTs = ts;
+    }
+  } else {
+    liveFlipState = null;
+    lastWasExporting = exporting;
   }
-  lastWasExporting = exporting;
 
   // Voltage — smoothed for chart, raw for extremes tracking.
   // syncChartScales only runs when an extreme is breached.
