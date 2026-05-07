@@ -408,8 +408,11 @@ html, body {
 /** Compact header row: direction label + large watt value inline. */
 .power-card-header {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   margin-bottom: 14px;
 }
 

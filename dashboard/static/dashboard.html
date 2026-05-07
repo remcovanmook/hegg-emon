@@ -135,6 +135,8 @@
               role="tab" aria-selected="true" aria-controls="tab-electricity">Electricity</button>
       <button class="tab-btn" id="tab-btn-usage"
               role="tab" aria-selected="false" aria-controls="tab-usage">Usage &amp; Cost</button>
+      <button class="tab-btn" id="tab-btn-forecast"
+              role="tab" aria-selected="false" aria-controls="tab-forecast">Forecast &amp; Pricing</button>
     </nav>
 
     <!-- ══ Tab 1: Electricity ══════════════════════════════════════════════ -->
@@ -384,9 +386,12 @@
               <span class="power-value mono cost-import" id="cost-net-total">—</span>
               <span class="power-unit">&euro;</span>
             </div>
-            <div class="power-card-deltas">
-              <span class="power-delta-in"  id="cost-delta-in"></span>
-              <span class="power-delta-out" id="cost-delta-out"></span>
+            <div style="display: flex; flex-direction: column; align-items: flex-end;">
+              <div class="power-card-deltas">
+                <span class="power-delta-in"  id="cost-delta-in"></span>
+                <span class="power-delta-out" id="cost-delta-out"></span>
+              </div>
+              <div id="cost-elec-breakdown" style="font-size: 0.7rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 4px;"></div>
             </div>
           </div>
           <div class="chart-wrapper chart-wrapper--cost">
@@ -413,7 +418,88 @@
         </div>
       </section>
 
+      <!-- Gas cost: eur -->
+      <section class="section" aria-labelledby="gas-cost-heading">
+        <h2 id="gas-cost-heading" class="section-title">Gas Cost</h2>
+        <div class="chart-card">
+          <div class="power-card-header">
+            <div class="power-card-headline">
+              <span class="power-direction">Gas cost</span>
+              <span class="power-value mono cost-import" id="cost-gas-total">—</span>
+              <span class="power-unit">&euro;</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end;">
+              <div class="power-card-deltas" style="min-height: 0;"></div>
+              <div id="cost-gas-breakdown" style="font-size: 0.7rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 4px;"></div>
+            </div>
+          </div>
+          <div class="chart-wrapper chart-wrapper--cost">
+            <canvas id="chart-gas-cost" aria-label="Hourly gas cost"></canvas>
+          </div>
+        </div>
+      </section>
+
     </div><!-- /#tab-usage -->
+
+    <!-- ══ Tab 3: Forecast & Pricing ═══════════════════════════════════════ -->
+    <div id="tab-forecast" role="tabpanel" aria-labelledby="tab-btn-forecast" hidden>
+      <section class="section" aria-labelledby="forecast-heading">
+        <h2 id="forecast-heading" class="section-title">Day-Ahead Outlook</h2>
+        <div class="cards-row cards-row--two" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px;">
+          <div class="chart-card" style="margin-top: 0;">
+            <div class="power-card-header">
+              <div class="power-card-headline">
+                <span class="power-direction">Electricity</span>
+              </div>
+              <div class="power-card-deltas">
+                <span style="color: var(--delivered-color)" id="current-elec-price">—</span>
+              </div>
+            </div>
+            <div class="chart-wrapper" style="height: 200px;">
+              <canvas id="chart-forecast-elec" aria-label="Forecasted electricity prices"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-card" style="margin-top: 0;">
+            <div class="power-card-header">
+              <div class="power-card-headline">
+                <span class="power-direction">Gas</span>
+              </div>
+              <div class="power-card-deltas">
+                <span style="color: var(--returned-color)" id="current-gas-price">—</span>
+              </div>
+            </div>
+            <div class="chart-wrapper" style="height: 200px;">
+              <canvas id="chart-forecast-gas" aria-label="Forecasted gas prices"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-card" style="margin-top: 0;">
+            <div class="power-card-header">
+              <div class="power-card-headline">
+                <span class="power-direction">Temperature</span>
+              </div>
+              <div class="power-card-deltas">
+                <span style="color: var(--voltage-color, #8b5cf6)" id="current-temp">—</span>
+              </div>
+            </div>
+            <div class="chart-wrapper" style="height: 200px;">
+              <canvas id="chart-forecast-temp" aria-label="Temperature forecast"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-card" style="margin-top: 0;">
+            <div class="power-card-header">
+              <div class="power-card-headline">
+                <span class="power-direction">Solar Radiation</span>
+              </div>
+            </div>
+            <div class="chart-wrapper" style="height: 200px;">
+              <canvas id="chart-forecast-solar" aria-label="Solar forecast"></canvas>
+            </div>
+          </div>
+        </div>
+    </div><!-- /#tab-forecast -->
 
   </main>
 

@@ -128,6 +128,30 @@ def api_prices() -> Response:
     return jsonify(rows)
 
 
+@app.route("/api/prices/gas", methods=["GET"])
+def api_prices_gas() -> Response:
+    """Return gas spot price entries."""
+    if _store is None:
+        return Response(status=204)
+    hours = int(request.args.get("hours", 24))
+    rows = _store.gas_prices_window(hours=hours)
+    if not rows:
+        return Response(status=204)
+    return jsonify(rows)
+
+
+@app.route("/api/weather", methods=["GET"])
+def api_weather() -> Response:
+    """Return weather forecast entries."""
+    if _store is None:
+        return Response(status=204)
+    hours = int(request.args.get("hours", 24))
+    rows = _store.weather_window(hours=hours)
+    if not rows:
+        return Response(status=204)
+    return jsonify(rows)
+
+
 @app.route("/api/summary/hourly", methods=["GET"])
 def api_summary_hourly() -> Response:
     """Return per-hour energy and gas consumption deltas.

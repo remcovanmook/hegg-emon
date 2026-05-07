@@ -246,6 +246,21 @@ CREATE TABLE IF NOT EXISTS prices (
     price_origin  TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_prices_ts ON prices (ts_start);
+
+CREATE TABLE IF NOT EXISTS gas_prices (
+    ts_start      INTEGER NOT NULL UNIQUE,
+    ts_end        INTEGER NOT NULL,
+    price_eur_m3  REAL    NOT NULL,
+    price_origin  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gas_prices_ts ON gas_prices (ts_start);
+
+CREATE TABLE IF NOT EXISTS weather_forecast (
+    ts            INTEGER NOT NULL UNIQUE,
+    temperature_c REAL    NOT NULL,
+    solar_wm2     REAL    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_weather_ts ON weather_forecast (ts);
 """
 
 _ROLLUP_INSERT_TEMPLATE = """
@@ -940,6 +955,36 @@ class HeggStore:
             )
             conn.commit()
 
+    def insert_gas_prices(self, rows: list) -> None:
+        """Store daily gas price rows fetched from the EnergyZero API."""
+        with self._write_lock:
+            conn = self._conn()
+            conn.executemany(
+                """INSERT OR REPLACE INTO gas_prices
+                       (ts_start, ts_end, price_eur_m3, price_origin)
+                   VALUES (?, ?, ?, ?)""",
+                [
+                    (r["ts_start"], r["ts_end"], r["price_eur_m3"], r["price_origin"])
+                    for r in rows
+                ],
+            )
+            conn.commit()
+
+    def insert_weather(self, rows: list) -> None:
+        """Store hourly weather forecasts from Open-Meteo API."""
+        with self._write_lock:
+            conn = self._conn()
+            conn.executemany(
+                """INSERT OR REPLACE INTO weather_forecast
+                       (ts, temperature_c, solar_wm2)
+                   VALUES (?, ?, ?)""",
+                [
+                    (r["ts"], r["temperature_c"], r["solar_wm2"])
+                    for r in rows
+                ],
+            )
+            conn.commit()
+
     def current_price(self) -> dict:
         """Return the price entry whose window covers the current UTC moment."""
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -981,9 +1026,63 @@ class HeggStore:
             for r in rows
         ]
 
+    def gas_prices_window(self, hours: int = 24) -> list:
+        """Return gas price entries from `now - hours` through all available data."""
+        since_ms = int(
+            (datetime.now(timezone.utc) - timedelta(hours=hours)).timestamp() * 1000
+        )
+        rows = self._conn().execute(
+            """SELECT ts_start, ts_end, price_eur_m3, price_origin
+               FROM gas_prices
+               WHERE ts_end >= ?
+               ORDER BY ts_start ASC""",
+            (since_ms,),
+        ).fetchall()
+        return [
+            {
+                "ts_start":      r[0],
+                "ts_end":        r[1],
+                "price_eur_m3":  r[2],
+                "price_origin":  r[3],
+            }
+            for r in rows
+        ]
+
+    def weather_window(self, hours: int = 24) -> list:
+        """Return weather forecast entries from `now - hours` through all available data."""
+        since_ms = int(
+            (datetime.now(timezone.utc) - timedelta(hours=hours)).timestamp() * 1000
+        )
+        rows = self._conn().execute(
+            """SELECT ts, temperature_c, solar_wm2
+               FROM weather_forecast
+               WHERE ts >= ?
+               ORDER BY ts ASC""",
+            (since_ms,),
+        ).fetchall()
+        return [
+            {
+                "ts":            r[0],
+                "temperature_c": r[1],
+                "solar_wm2":     r[2],
+            }
+            for r in rows
+        ]
+
     def has_current_prices(self) -> bool:
         """Return True if the DB contains a price entry for the current hour."""
         return bool(self.current_price())
+
+    def has_current_gas_prices(self) -> bool:
+        """Return True if the DB contains a gas price entry for the current time."""
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        row = self._conn().execute(
+            """SELECT 1 FROM gas_prices
+               WHERE ts_start <= ? AND ts_end > ?
+               LIMIT 1""",
+            (now_ms, now_ms),
+        ).fetchone()
+        return bool(row)
 
     def hourly_consumption(self, hours: int = 24) -> list:
         """Return per-hour energy and gas consumption deltas from `summaries`.

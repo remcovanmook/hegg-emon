@@ -2,17 +2,17 @@
 
 ## Overview
 
-SQLite is the shared data bus.  One writer, multiple independent readers.
+SQLite is the shared data bus. One writer for core telemetry, with supplementary independent API fetchers for forecasting data.
 
 ```
-Hegg device (UDP broadcast, 1 Hz)
-        │
-        ├──────────────────────────────────────────────┐
-        ▼                                              ▼
-hegg_collector.py          raw blocking UDP socket    hegg_mini.py
+Hegg device (UDP broadcast, 1 Hz)                          API Fetchers (Hourly/Daily)
+        │                                                     │
+        ├──────────────────────────────────────────────┐      ├─ price_fetcher.py
+        ▼                                              ▼      ├─ gas_price_fetcher.py
+hegg_collector.py          raw blocking UDP socket    hegg_mini.py  └─ weather_fetcher.py
         │                  → HeggStore.insert()       UDP → in-process queue
-        ▼                                              │
-   hegg.db  (SQLite)                                  ▼
+        ▼                                              │      │
+   hegg.db  (SQLite) ◄────────────────────────────────────────┘
         │                                    ThreadingHTTPServer
    ┌────┴──────────────────┬──────────────────────┐   port 8080
    ▼                       ▼                      ▼
@@ -146,6 +146,13 @@ The update loop runs in `hegg_server.py`: a daemon thread calls
 Contains `MQTTConfig` and `HAPublisher` with HA MQTT discovery and state
 payload logic.  Not yet wired to the store — the polling loop that reads
 new readings from SQLite and publishes to MQTT is the missing piece.
+
+### Fetcher Daemons (`price_fetcher.py`, `gas_price_fetcher.py`, `weather_fetcher.py`)
+
+Background thread loops managed by `hegg_server.py` that periodically acquire
+day-ahead projections and external pricing data, storing them in their respective
+tables (`prices`, `gas_prices`, `weather_forecast`). They abstract away rate-limiting 
+and API formatting.
 
 ### `hegg_mini.py`
 

@@ -51,6 +51,20 @@ let COLORS = chartPalette();
  */
 let WYE_CSS = {};
 
+/* ── Taxes & Tariffs (NL defaults) ─────────────────────────────────────── */
+
+const TARIFFS = {
+  vatMultiplier: 1.21,
+  electricity: {
+    energyTax: 0.10880, // €/kWh (ex VAT)
+    providerFee: 0.02,  // €/kWh (ex VAT)
+  },
+  gas: {
+    energyTax: 0.58300, // €/m³ (ex VAT)
+    providerFee: 0.08,  // €/m³ (ex VAT)
+  }
+};
+
 /**
  * X-axis tick configuration per history window.
  * unit + stepSize are passed directly to Chart.js time scale.
@@ -224,6 +238,8 @@ const currentExtremes = [
 ];
 
 let lastWasExporting  = null;
+let liveFlipState     = null;
+let liveFlipTs        = 0;
 let flipCount         = 0;
 let selectedHours     = 24;
 
@@ -372,7 +388,7 @@ function recolorCharts() {
 
   Chart.defaults.color = tick;
 
-  [powerChart, ...voltageCharts, ...currentCharts, usageChart, costChart, gasChart].filter(Boolean).forEach(chart => {
+  [powerChart, ...voltageCharts, ...currentCharts, usageChart, costChart, gasChart, gasCostChart, forecastElecChart, forecastGasChart, forecastTempChart, forecastSolarChart].filter(Boolean).forEach(chart => {
     for (const axis of Object.values(chart.options.scales)) {
       if (axis.ticks) axis.ticks.color = tick;
       if (axis.grid)  axis.grid.color  = grid;
@@ -464,6 +480,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Tab buttons.
   document.getElementById("tab-btn-electricity").addEventListener("click", () => switchTab("electricity"));
   document.getElementById("tab-btn-usage").addEventListener("click",       () => switchTab("usage"));
+  document.getElementById("tab-btn-forecast").addEventListener("click",    () => switchTab("forecast"));
 
   // Minute-level refresh for absolute values; device info is static.
   setInterval(loadSummary, 60_000);
@@ -476,7 +493,10 @@ document.addEventListener("DOMContentLoaded", () => {
   setTimeout(() => {
     initUsageCharts();
     loadUsageCharts();
+    initForecastChart();
+    loadForecastChart();
     setInterval(loadUsageCharts, 60 * 60_000);
+    setInterval(loadForecastChart, 15 * 60_000); // refresh forecast every 15 min
   }, 0);
 
   // Slide the X-axis min forward once per minute so the live edge stays
@@ -640,10 +660,10 @@ function initUsageCharts() {
     data: {
       labels: [],
       datasets: [
-        { label: "Import T1 (kWh)", data: [], backgroundColor: COLORS.delivered + "cc", borderRadius: 3, borderSkipped: false },
-        { label: "Import T2 (kWh)", data: [], backgroundColor: COLORS.delivered + "55", borderRadius: 3, borderSkipped: false },
-        { label: "Export T1 (kWh)", data: [], backgroundColor: COLORS.returned  + "cc", borderRadius: 3, borderSkipped: false },
-        { label: "Export T2 (kWh)", data: [], backgroundColor: COLORS.returned  + "55", borderRadius: 3, borderSkipped: false },
+        { label: "Import T1 (kWh)", data: [], backgroundColor: COLORS.delivered + "55", borderRadius: 3, borderSkipped: false },
+        { label: "Import T2 (kWh)", data: [], backgroundColor: COLORS.delivered + "cc", borderRadius: 3, borderSkipped: false },
+        { label: "Export T1 (kWh)", data: [], backgroundColor: COLORS.returned  + "55", borderRadius: 3, borderSkipped: false },
+        { label: "Export T2 (kWh)", data: [], backgroundColor: COLORS.returned  + "cc", borderRadius: 3, borderSkipped: false },
       ],
     },
     options: _barOpts("kWh", v => `${v.toFixed(3)} kWh`, ctx => `${ctx.dataset.label}: ${Math.abs(ctx.parsed.y).toFixed(4)} kWh`, true),
@@ -663,6 +683,22 @@ function initUsageCharts() {
       }],
     },
     options: _barOpts("m³", v => `${v.toFixed(3)} m³`, ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)} m³`),
+  });
+
+  // Hourly gas cost.
+  gasCostChart = new Chart(document.getElementById("chart-gas-cost"), {
+    type: "bar",
+    data: {
+      labels: [],
+      datasets: [{
+        label: "Gas Cost (€)",
+        data: [],
+        backgroundColor: "#f59e0bcc",
+        borderRadius: 3,
+        borderSkipped: false,
+      }],
+    },
+    options: _barOpts("€", v => `€${v.toFixed(3)}`, ctx => `${ctx.dataset.label}: €${Math.abs(ctx.parsed.y).toFixed(4)}`),
   });
 }
 
@@ -756,6 +792,8 @@ function computeHistoryFrame(data, hours) {
   let localFlipCount = 0;
   let prevExporting  = null;
   let lastExporting  = null;
+  let histFlipState  = null;
+  let histFlipTs     = 0;
 
   for (let idx = 0; idx < data.length; idx++) {
     const r  = data[idx];
@@ -779,12 +817,26 @@ function computeHistoryFrame(data, hours) {
     }
 
     const exporting = r.power_returned > r.power_delivered;
-    if (idx > 0 && exporting !== prevExporting) {
-      const id = `flip_${localFlipCount++}`;
-      newFlipAnnotations[id] = buildFlipAnnotationDescriptor(ts, exporting);
+    if (idx === 0) {
+      prevExporting = exporting;
+      lastExporting = exporting;
+    } else if (exporting !== prevExporting) {
+      if (histFlipState === exporting) {
+        if (ts - histFlipTs >= 10000) {
+          const id = `flip_${localFlipCount++}`;
+          newFlipAnnotations[id] = buildFlipAnnotationDescriptor(histFlipTs, exporting);
+          prevExporting = exporting;
+          lastExporting = exporting;
+          histFlipState = null;
+        }
+      } else {
+        histFlipState = exporting;
+        histFlipTs = ts;
+      }
+    } else {
+      histFlipState = null;
+      lastExporting = exporting;
     }
-    prevExporting = exporting;
-    lastExporting = exporting;
   }
 
   return {
@@ -960,7 +1012,7 @@ function setEnergyDelta(id, value, period, unit) {
 /* ── Tab switching ──────────────────────────────────────────────────────── */
 
 /** IDs of all tab panels and their corresponding button IDs. */
-const TAB_IDS = ["electricity", "usage"];
+const TAB_IDS = ["electricity", "usage", "forecast"];
 
 /**
  * Activate the named tab panel and deactivate all others.
@@ -985,7 +1037,11 @@ function switchTab(tabId) {
   // Also force a data repaint so any updates that arrived while the
   // electricity tab was hidden are rendered immediately on switch.
   if (tabId === "usage") {
-    [usageChart, costChart, gasChart].forEach(c => {
+    [usageChart, costChart, gasChart, gasCostChart].forEach(c => {
+      if (c) { c.resize(); c.update("none"); }
+    });
+  } else if (tabId === "forecast") {
+    [forecastElecChart, forecastGasChart, forecastTempChart, forecastSolarChart].forEach(c => {
       if (c) { c.resize(); c.update("none"); }
     });
   } else {
@@ -1051,6 +1107,11 @@ function _barOpts(yLabel, tickFmt, tooltipFmt, stacked = false) {
 /** @type {Chart|null} */ let costChart  = null;
 /** @type {Chart|null} */ let usageChart = null;
 /** @type {Chart|null} */ let gasChart   = null;
+/** @type {Chart|null} */ let gasCostChart = null;
+/** @type {Chart|null} */ let forecastElecChart = null;
+/** @type {Chart|null} */ let forecastGasChart = null;
+/** @type {Chart|null} */ let forecastTempChart = null;
+/** @type {Chart|null} */ let forecastSolarChart = null;
 
 /**
  * Fetch hourly consumption and price data and populate all three Usage &
@@ -1063,15 +1124,18 @@ let currentUsageFetchId = 0;
 async function loadUsageCharts() {
   const fetchId = ++currentUsageFetchId;
   let consumption, prices;
+  let gasPrices;
   try {
-    const [rC, rP] = await Promise.all([
+    const [rC, rP, rGP] = await Promise.all([
       fetch(`/api/summary/hourly?hours=${selectedHours}`),
       fetch(`/api/prices?hours=${selectedHours}`),
+      fetch(`/api/prices/gas?hours=${selectedHours}`),
     ]);
     if (fetchId !== currentUsageFetchId) return;
     if (!rC.ok || rC.status === 204) return;
     consumption = await rC.json();
     prices = rP.ok && rP.status !== 204 ? await rP.json() : [];
+    gasPrices = rGP.ok && rGP.status !== 204 ? await rGP.json() : [];
   } catch {
     return;
   }
@@ -1082,6 +1146,11 @@ async function loadUsageCharts() {
   const priceMap = {};
   for (const p of prices) priceMap[p.ts_start] = p.price_eur_kwh;
 
+  const getGasPrice = (ts) => {
+    const p = gasPrices.find(g => g.ts_start <= ts && g.ts_end > ts);
+    return p ? p.price_eur_m3 : null;
+  };
+
   // Generate every UTC hour slot for the full selected window.
   // Hours with no data get 0 so the x-axis spans the complete range.
   const HOUR_MS  = 3_600_000;
@@ -1089,11 +1158,15 @@ async function loadUsageCharts() {
   const startMs  = Math.floor((nowMs - selectedHours * HOUR_MS) / HOUR_MS) * HOUR_MS;
 
   const labels = [], d1 = [], d2 = [], r1 = [], r2 = [], gas = [];
-  const importCost = [], exportRevenue = [];
+  const importCost = [], exportRevenue = [], gasCost = [];
+
+  let totalElecSpot = 0, totalElecTaxFee = 0;
+  let totalGasSpot = 0, totalGasTaxFee = 0;
 
   for (let h = startMs; h <= nowMs; h += HOUR_MS) {
     const c     = consumMap[h];
     const price = priceMap[h] ?? null;
+    const gasP  = getGasPrice(h);
     const del1  = c ? (c.energy_delivered_tariff1 ?? 0) : 0;
     const del2  = c ? (c.energy_delivered_tariff2 ?? 0) : 0;
     const ret1  = c ? (c.energy_returned_tariff1  ?? 0) : 0;
@@ -1106,8 +1179,28 @@ async function loadUsageCharts() {
     r1.push(-(+(ret1.toFixed(4))));
     r2.push(-(+(ret2.toFixed(4))));
     gas.push(+(gasV.toFixed(4)));
-    importCost.push(   price !== null ? +((del1 + del2) * price).toFixed(4) : 0);
-    exportRevenue.push(price !== null ? -(+(ret1 + ret2) * price).toFixed(4) : 0);
+
+    let loadedPE = null;
+    if (price !== null) {
+      const imp = del1 + del2;
+      const exp = ret1 + ret2;
+      const netKwh = imp - exp;
+      
+      totalElecSpot += (imp * price) - (exp * price);
+      totalElecTaxFee += netKwh * (TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee);
+      loadedPE = (price + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
+    }
+    
+    let loadedPG = null;
+    if (gasP !== null) {
+      totalGasSpot += gasV * gasP;
+      totalGasTaxFee += gasV * (TARIFFS.gas.energyTax + TARIFFS.gas.providerFee);
+      loadedPG = (gasP + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
+    }
+
+    importCost.push(   loadedPE !== null ? +((del1 + del2) * loadedPE).toFixed(4) : 0);
+    exportRevenue.push(loadedPE !== null ? -(+(ret1 + ret2) * loadedPE).toFixed(4) : 0);
+    gasCost.push(      loadedPG !== null ? +(gasV * loadedPG).toFixed(4) : 0);
   }
 
   // Cache is already current from loadHistory; just apply it.
@@ -1131,12 +1224,17 @@ async function loadUsageCharts() {
     costChart.data.datasets[0].data = importCost;
     costChart.data.datasets[1].data = exportRevenue;
   }
+  if (gasCostChart) {
+    gasCostChart.data.labels           = labels;
+    gasCostChart.data.datasets[0].data = gasCost;
+  }
 
   // Only repaint if the usage tab is currently visible.
   if (usageChart && !usageChart.canvas.closest("[hidden]")) {
     usageChart.update("none");
     if (gasChart)  gasChart.update("none");
     if (costChart) costChart.update("none");
+    if (gasCostChart) gasCostChart.update("none");
   }
 
   // Period label, matching the format used by loadSummaryDelta.
@@ -1166,10 +1264,220 @@ async function loadUsageCharts() {
   if (costDeltaIn)  costDeltaIn.textContent  = `↓ €${totalImport.toFixed(2)} / ${_label}`;
   if (costDeltaOut) costDeltaOut.textContent = `↑ €${totalExport.toFixed(2)} / ${_label}`;
 
+  const elecBrk = document.getElementById("cost-elec-breakdown");
+  if (elecBrk) {
+    const totalElecVat = (totalElecSpot + totalElecTaxFee) * (TARIFFS.vatMultiplier - 1);
+    elecBrk.textContent = `Energy: €${totalElecSpot.toFixed(2)} | Tax+Fee: €${totalElecTaxFee.toFixed(2)} | VAT: €${totalElecVat.toFixed(2)}`;
+  }
+
   // Gas totals.
   const totalGas = gas.reduce((a, b) => a + b, 0);
   setText("gas-total-val", totalGas.toFixed(3));
+  
+  const totalGasCost = gasCost.reduce((a, b) => a + b, 0);
+  setText("cost-gas-total", totalGasCost.toFixed(2));
 
+  const gasBrk = document.getElementById("cost-gas-breakdown");
+  if (gasBrk) {
+    const totalGasVat = (totalGasSpot + totalGasTaxFee) * (TARIFFS.vatMultiplier - 1);
+    gasBrk.textContent = `Energy: €${totalGasSpot.toFixed(2)} | Tax+Fee: €${totalGasTaxFee.toFixed(2)} | VAT: €${totalGasVat.toFixed(2)}`;
+  }
+
+}
+
+/* ── Forecast & Pricing tab ────────────────────────────────────────────── */
+
+function initForecastChart() {
+  const getOpts = (yTitle, tooltipCb, beginAtZero) => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: "index", intersect: false },
+    elements: {
+      point: { radius: 0, hitRadius: 10, hoverRadius: 4 }
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: tooltipCb } }
+    },
+    scales: {
+      x: {
+        type: "time",
+        grid: { color: () => WYE_CSS.grid, drawBorder: false },
+        ticks: { color: () => WYE_CSS.text, maxRotation: 0, autoSkip: true, autoSkipPadding: 20 },
+      },
+      y: {
+        type: "linear",
+        position: "left",
+        title: { display: true, text: yTitle, color: () => WYE_CSS.text },
+        grid: { color: () => WYE_CSS.grid, drawBorder: false },
+        ticks: { color: () => WYE_CSS.text },
+        beginAtZero: beginAtZero
+      }
+    }
+  });
+
+  const optsE = getOpts("€ / kWh", ctx => `€${ctx.raw.y.toFixed(3)}`, true);
+  optsE.scales.x.offset = true;
+  const ctxE = document.getElementById("chart-forecast-elec");
+  if (ctxE) forecastElecChart = new Chart(ctxE, { type: "bar", data: { datasets: [] }, options: optsE });
+
+  const ctxG = document.getElementById("chart-forecast-gas");
+  if (ctxG) forecastGasChart = new Chart(ctxG, { type: "line", data: { datasets: [] }, options: getOpts("€ / m³", ctx => `€${ctx.raw.y.toFixed(3)}`, true) });
+
+  const ctxT = document.getElementById("chart-forecast-temp");
+  if (ctxT) forecastTempChart = new Chart(ctxT, { type: "line", data: { datasets: [] }, options: getOpts("°C", ctx => `${ctx.raw.y.toFixed(1)} °C`, false) });
+
+  const ctxS = document.getElementById("chart-forecast-solar");
+  if (ctxS) forecastSolarChart = new Chart(ctxS, { type: "line", data: { datasets: [] }, options: getOpts("W/m²", ctx => `${ctx.raw.y} W/m²`, true) });
+}
+
+let currentForecastFetchId = 0;
+async function loadForecastChart() {
+  const fetchId = ++currentForecastFetchId;
+  let pricesElec, pricesGas, weather;
+  try {
+    const [rPE, rPG, rW] = await Promise.all([
+      fetch(`/api/prices?hours=48`),
+      fetch(`/api/prices/gas?hours=48`),
+      fetch(`/api/weather?hours=48`),
+    ]);
+    if (fetchId !== currentForecastFetchId) return;
+    pricesElec = (rPE.ok && rPE.status !== 204) ? await rPE.json() : [];
+    pricesGas = (rPG.ok && rPG.status !== 204) ? await rPG.json() : [];
+    weather = (rW.ok && rW.status !== 204) ? await rW.json() : [];
+  } catch {
+    return;
+  }
+
+  const now = Date.now();
+  const nowMs = Math.floor(now / 3600000) * 3600000;
+  const maxMs = nowMs + (48 * 3600000);
+
+  // Filter all data strictly to [nowMs, maxMs]
+  const filterByTime = (p) => {
+    const ts = p.ts || p.ts_start;
+    return ts >= nowMs && ts <= maxMs;
+  };
+  
+  pricesElec = pricesElec.filter(filterByTime);
+  weather = weather.filter(filterByTime);
+
+  // Gas: deduplicate overlapping chunks by sorting and cleaning up the map
+  const validGasMap = new Map();
+  pricesGas.forEach(p => {
+    if (p.ts_start <= maxMs && p.ts_end >= nowMs) {
+      validGasMap.set(p.ts_start, p);
+    }
+  });
+  const validGas = Array.from(validGasMap.values()).sort((a,b) => a.ts_start - b.ts_start);
+
+  const currentElec = pricesElec.length > 0 ? pricesElec[0] : null;
+  const currentGas = validGas.find(p => p.ts_start <= now && p.ts_end > now) || validGas[0];
+  
+  if (currentElec) {
+    const loadedE = (currentElec.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
+    document.getElementById("current-elec-price").textContent = `€${loadedE.toFixed(3)}`;
+  }
+  if (currentGas) {
+    const loadedG = (currentGas.price_eur_m3 + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
+    document.getElementById("current-gas-price").textContent = `€${loadedG.toFixed(3)}`;
+  }
+
+  let currentTempStr = "—";
+  if (weather.length > 0) {
+    currentTempStr = `${weather[0].temperature_c.toFixed(1)} °C`;
+  }
+  document.getElementById("current-temp").textContent = currentTempStr;
+
+  const setScale = (c) => {
+    if (c) {
+      c.options.scales.x.min = nowMs;
+      c.options.scales.x.max = maxMs;
+    }
+  };
+  [forecastElecChart, forecastGasChart, forecastTempChart, forecastSolarChart].forEach(setScale);
+
+  if (forecastElecChart) {
+    const elecData = pricesElec.map(p => {
+      const loadedPE = (p.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
+      return { x: p.ts_start, y: loadedPE };
+    });
+    // Project the last known electricity price hourly to the edge of the chart (+48h)
+    if (pricesElec.length > 0) {
+      const last = pricesElec[pricesElec.length - 1];
+      const loadedPE = (last.price_eur_kwh + TARIFFS.electricity.energyTax + TARIFFS.electricity.providerFee) * TARIFFS.vatMultiplier;
+      let nextTs = last.ts_end;
+      while (nextTs < maxMs) {
+        elecData.push({ x: nextTs, y: loadedPE });
+        nextTs += 3600000;
+      }
+    }
+
+    const sortedPrices = elecData.map(d => d.y).sort((a,b) => a - b);
+    const p15 = sortedPrices[Math.max(0, Math.floor(sortedPrices.length * 0.15) - 1)] || 0;
+    const p85 = sortedPrices[Math.min(sortedPrices.length - 1, Math.floor(sortedPrices.length * 0.85))] || 0;
+
+    const bgColors = elecData.map(d => {
+      if (d.y >= p85) return "#3b82f6cc"; // Blue
+      if (d.y <= p15) return "#10b981cc"; // Green
+      return "#6b749088";                 // Neutral grey
+    });
+
+    forecastElecChart.data.datasets = [{
+      label: "Electricity Cost",
+      data: elecData,
+      backgroundColor: bgColors,
+      borderRadius: 3,
+      borderSkipped: false
+    }];
+    forecastElecChart.update();
+  }
+
+  if (forecastGasChart) {
+    const gasData = [];
+    validGas.forEach(p => {
+      const loadedPG = (p.price_eur_m3 + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
+      gasData.push({ x: p.ts_start, y: loadedPG });
+    });
+    // Project the last known gas price to the edge of the chart (+48h)
+    if (validGas.length > 0) {
+      const last = validGas[validGas.length - 1];
+      const loadedPG = (last.price_eur_m3 + TARIFFS.gas.energyTax + TARIFFS.gas.providerFee) * TARIFFS.vatMultiplier;
+      gasData.push({ x: Math.max(last.ts_end, maxMs), y: loadedPG });
+    }
+    forecastGasChart.data.datasets = [{
+      label: "Gas Cost",
+      data: gasData,
+      borderColor: COLORS.returned,
+      backgroundColor: COLORS.returned + "33",
+      stepped: "after",
+      fill: "origin"
+    }];
+    forecastGasChart.update();
+  }
+
+  if (forecastTempChart) {
+    forecastTempChart.data.datasets = [{
+      label: "Temperature",
+      data: weather.map(w => ({ x: w.ts, y: w.temperature_c })),
+      borderColor: COLORS.voltage,
+      tension: 0.4
+    }];
+    forecastTempChart.update();
+  }
+
+  if (forecastSolarChart) {
+    forecastSolarChart.data.datasets = [{
+      label: "Solar Radiation",
+      data: weather.map(w => ({ x: w.ts, y: w.solar_wm2 })),
+      borderColor: "#fadb14",
+      backgroundColor: "#fadb1433",
+      fill: true,
+      tension: 0.4
+    }];
+    forecastSolarChart.update();
+  }
 }
 
 /* ── SSE ────────────────────────────────────────────────────────────────── */
@@ -1326,12 +1634,25 @@ function appendToCharts(r) {
     y: Math.round((s.power_delivered - s.power_returned) * 1000),
   });
 
-  // Use raw r for flip detection — direction changes must be immediate.
+  // Use raw r for flip detection — debounced by 10 seconds.
   const exporting = r.power_returned > r.power_delivered;
-  if (lastWasExporting !== null && exporting !== lastWasExporting) {
-    addFlipAnnotation(ts, exporting);
+  if (lastWasExporting === null) {
+    lastWasExporting = exporting;
+  } else if (exporting !== lastWasExporting) {
+    if (liveFlipState === exporting) {
+      if (ts - liveFlipTs >= 10000) {
+        addFlipAnnotation(liveFlipTs, exporting);
+        lastWasExporting = exporting;
+        liveFlipState = null;
+      }
+    } else {
+      liveFlipState = exporting;
+      liveFlipTs = ts;
+    }
+  } else {
+    liveFlipState = null;
+    lastWasExporting = exporting;
   }
-  lastWasExporting = exporting;
 
   // Voltage — smoothed for chart, raw for extremes tracking.
   // syncChartScales only runs when an extreme is breached.

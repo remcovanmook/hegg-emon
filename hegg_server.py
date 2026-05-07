@@ -85,6 +85,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--mqtt-pass",       default=os.getenv("HEGG_MQTT_PASS", ""))
     p.add_argument("--price-api-key",   default=os.getenv("HEGG_PRICE_API_KEY", ""),
                    help="energyforecast.de API token for day-ahead price fetching")
+    p.add_argument("--lat",             type=float, default=float(os.getenv("HEGG_LAT", "52.3676")),
+                   help="Latitude for Open-Meteo weather forecasts (default: Amsterdam)")
+    p.add_argument("--lon",             type=float, default=float(os.getenv("HEGG_LON", "4.9041")),
+                   help="Longitude for Open-Meteo weather forecasts (default: Amsterdam)")
     p.add_argument("--debug",           action="store_true")
     return p.parse_args()
 
@@ -155,9 +159,24 @@ def main() -> None:
         from hegg.price_fetcher import PriceFetcher
         price_store = get_store(db_path)
         PriceFetcher(store=price_store, api_key=args.price_api_key).start()
-        logger.info("Price fetcher started (market_zone=NL, daily at 14:00 UTC)")
+        logger.info("Electricity price fetcher started (market_zone=NL, daily at 14:00 UTC)")
     else:
-        logger.info("No --price-api-key supplied — price fetching disabled")
+        logger.info("No --price-api-key supplied — electricity price fetching disabled")
+
+    # ── Gas Price fetcher: pulls day-ahead gas prices once daily ──────────────
+    from hegg.gas_price_fetcher import GasPriceFetcher
+    gas_store = get_store(db_path)
+    GasPriceFetcher(store=gas_store).start()
+    logger.info("Gas price fetcher started (daily at 15:00 UTC via EnergyZero)")
+
+    # ── Weather fetcher: pulls hourly forecasts ───────────────────────────────
+    if args.lat and args.lon:
+        from hegg.weather_fetcher import WeatherFetcher
+        weather_store = get_store(db_path)
+        WeatherFetcher(store=weather_store, lat=args.lat, lon=args.lon).start()
+        logger.info("Weather fetcher started (lat=%.4f, lon=%.4f)", args.lat, args.lon)
+    else:
+        logger.info("Weather fetch disabled (missing --lat / --lon)")
 
     # ── Flask dashboard: reads SQLite ─────────────────────────────────────────
     application = create_app(db_path=db_path)
