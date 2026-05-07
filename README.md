@@ -98,6 +98,9 @@ Set in `/etc/default/hegg` (for service deployments) or as CLI flags:
 | `HEGG_MQTT_PORT` / `--mqtt-port` | `1883` | MQTT broker port |
 | `HEGG_MQTT_USER` / `--mqtt-user` | _(none)_ | MQTT username |
 | `HEGG_MQTT_PASS` / `--mqtt-pass` | _(none)_ | MQTT password |
+| `HEGG_PRICE_API_KEY` / `--price-api-key` | _(none)_ | ENTSO-E REST API key for EPEX electricity prices |
+| `HEGG_LAT` / `--lat` | `52.3676` | Latitude for Open-Meteo weather forecasts |
+| `HEGG_LON` / `--lon` | `4.9041` | Longitude for Open-Meteo weather forecasts |
 
 ---
 
@@ -107,6 +110,8 @@ Set in `/etc/default/hegg` (for service deployments) or as CLI flags:
 - Vertical markers on all charts when import/export direction flips
 - Summary strip: cumulative energy (T1/T2), gas usage, device info
 - History selector: 1 h / 6 h / 24 h / 3 d / 7 d
+- **Usage & Cost**: Historical bar charts mapping imported and exported energy to loaded NL €/kWh prices.
+- **Forecast & Pricing**: Day-ahead EPEX electricity and TTF gas pricing, complete with weather and solar forecasting.
 
 ---
 
@@ -160,6 +165,9 @@ hegg/
   store.py              SQLite wrapper — the only code that touches the DB
   prometheus_exporter.py
   ha_publisher.py       MQTT discovery + state publish logic
+  price_fetcher.py      Day-ahead EPEX electricity price daemon
+  gas_price_fetcher.py  TTF day-ahead gas price daemon
+  weather_fetcher.py    Weather and solar forecast daemon
 
 dashboard/
   app.py                Flask app, SSE stream, REST API
