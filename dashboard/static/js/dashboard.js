@@ -2584,30 +2584,35 @@ function drawNeutralMini(re, im, mag) {
   const pxLen = Math.hypot(vx - cx, vy - cy);
 
   if (pxLen > 1.5) {
-    // Shaft.
+    // Shaft: offset point → origin (arrowhead points at the balanced centre).
     ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(vx, vy);
+    ctx.moveTo(vx, vy);
+    ctx.lineTo(cx, cy);
     ctx.strokeStyle = cN;
     ctx.lineWidth   = 2;
     ctx.setLineDash([]);
     ctx.stroke();
 
-    // Arrowhead.
-    const ang = Math.atan2(cy - vy, vx - cx);
+    // Arrowhead at (cx, cy) — angle from offset point toward centre.
+    const ang = Math.atan2(cy - vy, cx - vx);
     const hs  = 6;
     ctx.beginPath();
-    ctx.moveTo(vx, vy);
-    ctx.lineTo(vx - hs * Math.cos(ang - 0.4), vy + hs * Math.sin(ang - 0.4));
-    ctx.lineTo(vx - hs * Math.cos(ang + 0.4), vy + hs * Math.sin(ang + 0.4));
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx - hs * Math.cos(ang - 0.4), cy - hs * Math.sin(ang - 0.4));
+    ctx.lineTo(cx - hs * Math.cos(ang + 0.4), cy - hs * Math.sin(ang + 0.4));
     ctx.closePath();
     ctx.fillStyle = cN;
     ctx.fill();
 
-    // Magnitude label nudged outward from the tip.
-    const nudge = 0.25;
-    const lx = vx + (vx - cx) * nudge;
-    const ly = vy + (vy - cy) * nudge - 4;
+    // Red dot at the offset point — "you are here".
+    ctx.beginPath();
+    ctx.arc(vx, vy, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = "#ef4444";
+    ctx.fill();
+
+    // Magnitude label nudged outward from the offset point (away from centre).
+    const lx = vx + (vx - cx) * 0.35;
+    const ly = vy + (vy - cy) * 0.35 - 4;
     ctx.font         = "bold 9px 'JetBrains Mono', monospace";
     ctx.fillStyle    = cN;
     ctx.textAlign    = "center";
