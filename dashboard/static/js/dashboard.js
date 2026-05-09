@@ -2468,7 +2468,10 @@ function updateWyeDiagram(v1, v2, v3) {
   // Neutral offset.
   const ns    = neutralShift(v1, v2, v3);
   const nMag  = Math.hypot(ns.re, ns.im);
-  const nAng  = (Math.atan2(ns.im, ns.re) * 180 / Math.PI).toFixed(1);
+  // Compass bearing: clockwise from north (top), always 0–360°.
+  // Math.atan2 returns CCW from east; bearing = (90 − math_deg + 360) % 360.
+  const nAngMath = Math.atan2(ns.im, ns.re) * 180 / Math.PI;
+  const nAng     = (((90 - nAngMath) % 360 + 360) % 360).toFixed(1);
   const imbal = voltageImbalance(v1, v2, v3);
   setText("wye-neutral-mag", nMag.toFixed(2));
   setText("wye-neutral-ang", nAng);
