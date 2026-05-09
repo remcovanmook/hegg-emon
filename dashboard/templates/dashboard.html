@@ -17,35 +17,7 @@
 </head>
 <body>
 
-  <header class="header">
-    <div class="header-inner">
-      <div class="logo">
-        <div class="logo-mark" aria-hidden="true">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <path d="M16 2L4 16h9l-1 10 12-14h-9l1-10z" fill="currentColor"/>
-          </svg>
-        </div>
-        <span class="logo-text">Hegg</span>
-        <span class="logo-sub">Energy Monitor</span>
-      </div>
-      <div class="header-controls">
-        <label class="range-label" for="history-range">History</label>
-        <select id="history-range" class="range-select">
-          <option value="1">1 h</option>
-          <option value="6">6 h</option>
-          <option value="24" selected>24 h</option>
-          <option value="72">3 d</option>
-          <option value="168">7 d</option>
-        </select>
-        <span class="header-time" id="header-time" aria-live="off">—</span>
-        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle colour theme"></button>
-        <output class="connection-status" id="connection-status" aria-live="polite">
-          <span class="status-dot" id="status-dot"></span>
-          <span class="status-label" id="status-label">Connecting…</span>
-        </output>
-      </div>
-    </div>
-  </header>
+  {% include 'shared/_header.html' %}
 
   <!-- Sticky chrome: summary strip + tab bar remain visible while scrolling. -->
   <div class="sticky-chrome">
