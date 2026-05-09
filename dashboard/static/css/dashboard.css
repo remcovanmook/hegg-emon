@@ -238,6 +238,20 @@ html, body {
 .status-dot.disconnected { background: var(--accent-red); }
 .status-dot.connecting   { background: var(--accent-amber); animation: pulse 1s infinite; }
 
+/*
+ * Inverter operating-state colours — applied on top of the connection state
+ * once the first SSE data packet arrives.
+ *
+ *   inv-normal  Bright green + glow: PV / battery actively on-grid.
+ *   inv-bypass  Dark green: power routed through bypass relay (no conversion).
+ *   inv-fault   Red: hardware or protection fault active.
+ *   inv-other   Amber: standby, self-test, upgrade, off-grid, or unknown.
+ */
+.status-dot.inv-normal { background: var(--accent-green);  box-shadow: 0 0 10px var(--accent-green); animation: pulse 2s infinite; }
+.status-dot.inv-bypass { background: #166534;              box-shadow: none; animation: none; }
+.status-dot.inv-fault  { background: var(--accent-red);    box-shadow: 0 0 10px var(--accent-red);   animation: pulse 0.8s infinite; }
+.status-dot.inv-other  { background: var(--accent-amber);  box-shadow: none; animation: none; }
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
@@ -821,10 +835,9 @@ html, body {
   box-shadow: none;
 }
 
-/* Tab bar: no extra left/right padding needed — inherited from > * above. */
+/* Tab bar: left/right padding comes from the .sticky-chrome > * constraint
+ * (24px, matching .main). Only override margin and border. */
 .sticky-chrome .tab-bar {
-  padding-left: 0;
-  padding-right: 0;
   margin-bottom: 0;
   border-bottom: none; /* chrome border-bottom serves this purpose */
 }
