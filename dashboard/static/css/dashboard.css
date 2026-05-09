@@ -898,7 +898,8 @@ html, body {
   .summary-item:nth-last-child(-n+2) { border-bottom: none; }
 
   /* Unpin the full sticky-chrome on mobile: summary strip scrolls away with
-   * the page, saving precious screen height. */
+   * the page, saving precious screen height. Push it down by the tab bar
+   * height so the summary strip clears the fixed tab bar above it. */
   .sticky-chrome {
     position: static;
     background: none;
@@ -906,6 +907,7 @@ html, body {
     -webkit-backdrop-filter: none;
     box-shadow: none;
     border-bottom: none;
+    padding-top: var(--tab-bar-h, 44px);
   }
 
   /* Tab bar: position:fixed so it stays at the top regardless of
