@@ -247,7 +247,7 @@ html, body {
 .main {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 32px 24px 64px;
+  padding: 20px 24px 64px;   /* top reduced: chrome provides spacing */
   display: flex;
   flex-direction: column;
   gap: 36px;
@@ -260,9 +260,9 @@ html, body {
   clip: rect(0,0,0,0); white-space: nowrap; border: 0;
 }
 
-/* ── Summary strip (top of page) ── */
+/* Summary strip no longer needs a negative margin; it lives in sticky-chrome. */
 .section--summary {
-  margin-bottom: -12px; /* tighten gap below strip */
+  margin-bottom: 0;
 }
 
 .summary-strip {
@@ -777,23 +777,147 @@ html, body {
   animation: value-flash 0.3s ease-out;
 }
 
-/* ── Responsive ── */
-@media (max-width: 768px) {
-  .cards-row--three {
-    grid-template-columns: 1fr;
-  }
+/* ── Sticky chrome: summary strip + tab bar ── */
 
-  .card-value { font-size: 2rem; }
+/*
+ * .sticky-chrome wraps the summary strip and the tab bar, sitting directly
+ * after <header> in the DOM.  Both are full-width, glass-blurred, and sticky
+ * as a unit so the entire navigation chrome stays on screen while scrolling.
+ *
+ * --header-h tracks the header height and is used as the sticky offset.
+ * On desktop the header is always 60 px; JS or a resize observer can update
+ * this variable if it ever becomes dynamic.
+ */
+:root { --header-h: 60px; }
 
-  .main { padding: 20px 16px 48px; gap: 24px; }
-
-  .logo-sub { display: none; }
+.sticky-chrome {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 90;
+  background: var(--header-bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  /* Extend full width — chrome is not inside .main's max-width container. */
+  width: 100%;
 }
 
-@media (max-width: 480px) {
-  .cards-row {
-    grid-template-columns: 1fr;
+/* Constrain inner content to the same max-width as .main / .header-inner. */
+.sticky-chrome > * {
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+/* Summary strip: add top spacing inside chrome; remove card-level shadow
+ * (the chrome background replaces the raised card look). */
+.sticky-chrome .summary-strip {
+  padding-top: 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Tab bar: no extra left/right padding needed — inherited from > * above. */
+.sticky-chrome .tab-bar {
+  padding-left: 0;
+  padding-right: 0;
+  margin-bottom: 0;
+  border-bottom: none; /* chrome border-bottom serves this purpose */
+}
+
+/* ── Responsive ── */
+
+/* Tablet (≤ 960 px) */
+@media (max-width: 960px) {
+  .cards-row--four { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Mobile landscape / small tablet (≤ 768 px) */
+@media (max-width: 768px) {
+  /* Header: allow controls row to wrap on narrow viewports. */
+  .header-inner {
+    height: auto;
+    min-height: 56px;
+    padding: 10px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
   }
+
+  .header-controls {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* Hide the clock — saves horizontal space; timestamp is low-priority on mobile. */
+  .header-time { display: none; }
+
+  /* Update sticky offset to match shorter header on mobile. */
+  :root { --header-h: 56px; }
+
+  /* Summary strip: 2 × 2 grid instead of a single horizontal row. */
+  .summary-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .summary-item {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .summary-item:nth-child(odd)  { border-right: 1px solid var(--border); }
+  .summary-item:nth-last-child(-n+2) { border-bottom: none; }
+
+  /* Tab bar: scroll horizontally so tabs are never truncated or wrapped. */
+  .sticky-chrome .tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;     /* Firefox */
+  }
+  .sticky-chrome .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-btn { white-space: nowrap; flex-shrink: 0; }
+
+  /* Main layout tightening. */
+  .main { padding: 16px 16px 48px; gap: 20px; }
+
+  /* Cards: two columns on mid-size mobile, one below 480. */
+  .cards-row       { grid-template-columns: 1fr 1fr; }
+  .cards-row--four { grid-template-columns: 1fr 1fr; }
+  .cards-row--three { grid-template-columns: 1fr 1fr; }
+
+  .card-value { font-size: 2rem; }
+  .logo-sub   { display: none; }
+
+  /* Wye diagram: stack canvas above stats table on small screens. */
+  .wye-layout { flex-direction: column; }
+  .wye-diagram-wrap { min-height: 260px; }
+  .wye-stats { flex-direction: row; flex-wrap: wrap; }
+  .wye-stats-group { min-width: 240px; flex: 1; }
+}
+
+/* Mobile portrait (≤ 480 px) */
+@media (max-width: 480px) {
+  .cards-row,
+  .cards-row--three,
+  .cards-row--four  { grid-template-columns: 1fr; }
+
+  /* Summary strip: single column. */
+  .summary-strip { grid-template-columns: 1fr; }
+  .summary-item { border-right: none; }
+  .summary-item:nth-child(odd) { border-right: none; }
+  .summary-item:nth-last-child(-n+2) { border-bottom: 1px solid var(--border); }
+  .summary-item:last-child { border-bottom: none; }
+}
+
+/* High-DPI / large desktop (≥ 1440 px): slightly more generous page padding. */
+@media (min-width: 1440px) {
+  .sticky-chrome > * { padding-left: 40px; padding-right: 40px; }
+  .main { padding-left: 40px; padding-right: 40px; }
+  .header-inner { padding: 0 40px; }
 }
 
 /* ── Flip annotation tooltip ── */
@@ -1114,3 +1238,45 @@ html, body {
 .cost-export        { color: var(--returned-color);   }
 .cost-net--positive { color: var(--accent-red);       }
 .cost-net--negative { color: var(--accent-green);     }
+
+/* Cute Flow Diagram CSS */
+.power-flow {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 2rem; margin-bottom: 2rem; position: relative;
+}
+.flow-container {
+  position: relative; height: 300px; width: 100%; max-width: 800px; margin: 0 auto;
+}
+.flow-node {
+  position: absolute; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; width: 120px; height: 100px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  z-index: 10; font-weight: 500; font-size: 0.9rem;
+}
+.flow-node .icon { font-size: 2rem; margin-bottom: 0.25rem; }
+.flow-node .val { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 1.1rem; margin-top: 0.25rem; }
+
+/* Positions */
+#node-pv { top: 20px; left: 0; }
+#node-inv { top: 20px; left: 340px; border-color: var(--accent-blue); }
+#node-grid { top: 20px; left: 680px; }
+#node-bat { top: 180px; left: 160px; }
+#node-load { top: 180px; left: 520px; }
+
+.flow-lines {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none;
+}
+.flow-line {
+  fill: none; stroke: var(--border); stroke-width: 4; stroke-dasharray: 8; opacity: 1.0;
+}
+.flow-line.active {
+  stroke: var(--accent-blue); opacity: 0.8; animation: flowDash 1s linear infinite;
+}
+.flow-line.export { stroke: var(--returned-color); }
+.flow-line.import { stroke: var(--delivered-color); animation-direction: reverse; }
+.flow-line.charging { stroke: var(--delivered-color); }
+.flow-line.discharging { stroke: var(--returned-color); animation-direction: reverse; }
+
+@keyframes flowDash {
+  to { stroke-dashoffset: -16; }
+}

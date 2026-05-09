@@ -47,11 +47,11 @@
     </div>
   </header>
 
-  <main class="main">
+  <!-- Sticky chrome: summary strip + tab bar remain visible while scrolling. -->
+  <div class="sticky-chrome">
 
+    <h1 id="summary-heading" class="sr-only">Summary</h1>
     <!-- ── Summary strip (always visible) ─────────────────────────────── -->
-    <section class="section section--summary" aria-labelledby="summary-heading">
-      <h1 id="summary-heading" class="sr-only">Summary</h1>
       <div class="summary-strip">
 
         <!-- Energy In -->
@@ -127,8 +127,6 @@
         </div>
 
       </div>
-    </section>
-
     <!-- ── Tab bar ─────────────────────────────────────────────────────── -->
     <nav class="tab-bar" role="tablist" aria-label="Dashboard view">
       <button class="tab-btn tab-btn--active" id="tab-btn-electricity"
@@ -138,6 +136,10 @@
       <button class="tab-btn" id="tab-btn-forecast"
               role="tab" aria-selected="false" aria-controls="tab-forecast">Forecast &amp; Pricing</button>
     </nav>
+  </div><!-- /.sticky-chrome -->
+
+  <main class="main">
+
 
     <!-- ══ Tab 1: Electricity ══════════════════════════════════════════════ -->
     <div id="tab-electricity" role="tabpanel" aria-labelledby="tab-btn-electricity">
