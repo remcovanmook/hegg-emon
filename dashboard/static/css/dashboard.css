@@ -490,6 +490,17 @@ html, body {
   margin-bottom: 14px;
 }
 
+/** Muted inline annotation inside a section-title (e.g. "−200 V display base"). */
+.section-subtitle {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim);
+  margin-left: 0.5em;
+}
+
 .section-hint {
   font-weight: 400;
   letter-spacing: 0;
@@ -886,11 +897,36 @@ html, body {
   .summary-item:nth-child(odd)  { border-right: 1px solid var(--border); }
   .summary-item:nth-last-child(-n+2) { border-bottom: none; }
 
-  /* Tab bar: scroll horizontally so tabs are never truncated or wrapped. */
+  /* Unpin the full sticky-chrome on mobile: summary strip scrolls away with
+   * the page, saving precious screen height. */
+  .sticky-chrome {
+    position: static;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+    border-bottom: none;
+  }
+
+  /* Tab bar gets its own sticky positioning and glass background.
+   * Negative margins bleed the background edge-to-edge while the
+   * tab buttons stay at the correct 16px indent via restored padding. */
   .sticky-chrome .tab-bar {
+    position: sticky;
+    top: var(--header-h, 56px);
+    z-index: 90;
+    margin-left:  -24px;
+    margin-right: -24px;
+    padding-left:  16px;
+    padding-right: 16px;
+    background: var(--header-bg-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    /* Horizontal scroll kept for overflow tabs */
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;     /* Firefox */
+    scrollbar-width: none;
   }
   .sticky-chrome .tab-bar::-webkit-scrollbar { display: none; }
   .tab-btn { white-space: nowrap; flex-shrink: 0; }
@@ -898,27 +934,23 @@ html, body {
   /* Main layout tightening. */
   .main { padding: 16px 16px 48px; gap: 20px; }
 
-  /* Cards: two columns on mid-size mobile, one below 480. */
-  .cards-row       { grid-template-columns: 1fr 1fr; }
-  .cards-row--four { grid-template-columns: 1fr 1fr; }
-  .cards-row--three { grid-template-columns: 1fr 1fr; }
+  /* Cards: single column on mobile — sparklines stack vertically. */
+  .cards-row,
+  .cards-row--three,
+  .cards-row--four  { grid-template-columns: 1fr; }
 
   .card-value { font-size: 2rem; }
   .logo-sub   { display: none; }
 
   /* Wye diagram: stack canvas above stats table on small screens. */
   .wye-layout { flex-direction: column; }
-  .wye-diagram-wrap { min-height: 260px; }
+  .wye-diagram-wrap { min-height: 220px; }
   .wye-stats { flex-direction: row; flex-wrap: wrap; }
   .wye-stats-group { min-width: 240px; flex: 1; }
 }
 
-/* Mobile portrait (≤ 480 px) */
+/* Mobile portrait (≤ 480 px): summary to single column (already single-col cards). */
 @media (max-width: 480px) {
-  .cards-row,
-  .cards-row--three,
-  .cards-row--four  { grid-template-columns: 1fr; }
-
   /* Summary strip: single column. */
   .summary-strip { grid-template-columns: 1fr; }
   .summary-item { border-right: none; }
@@ -999,10 +1031,11 @@ html, body {
   align-items: center;
 }
 
-/** Square canvas container; canvas fills it 1:1. */
+/** Canvas container — height is set dynamically by resizeWyeCanvas() so it
+ * clips exactly at the 253 V ring bottom. min-height guards the pre-JS flash. */
 .wye-diagram-wrap {
   width: 380px;
-  height: 380px;
+  min-height: 200px;
   flex-shrink: 0;
   position: relative;
 }
@@ -1259,7 +1292,20 @@ html, body {
   padding: 2rem; margin-bottom: 2rem; position: relative;
 }
 .flow-container {
-  position: relative; height: 300px; width: 100%; max-width: 800px; margin: 0 auto;
+  position: relative; height: 300px; width: 800px;  /* fixed 800px coordinate space */
+  transform-origin: top left;
+  will-change: transform;
+}
+
+/*
+ * .flow-scale-wrap clips the scaled .flow-container and provides the
+ * correct layout height after transform. Height is set by JS via the
+ * --flow-scale custom property.
+ */
+.flow-scale-wrap {
+  overflow: hidden;
+  width: 100%;
+  height: calc(300px * var(--flow-scale, 1));
 }
 .flow-node {
   position: absolute; display: flex; flex-direction: column; align-items: center;
