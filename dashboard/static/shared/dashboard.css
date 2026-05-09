@@ -1,0 +1,1346 @@
+/* ============================================================
+   Hegg Energy Dashboard — design system & layout
+   ============================================================ */
+
+/* ── Custom properties — light theme (default) ── */
+:root {
+  --bg:          #f3f5fa;
+  --surface:     #ffffff;
+  --surface-2:   #edf0f7;
+  --border:      rgba(0, 0, 0, 0.08);
+
+  --text:        #1a1d2e;
+  --text-muted:  #6b7490;
+  --text-dim:    #c8cedf;
+
+  --accent-blue:   #2563eb;
+  --accent-green:  #16a34a;
+  --accent-amber:  #d97706;
+  --accent-red:    #dc2626;
+  --accent-purple: #9333ea;
+
+  --delivered-color: #2563eb;
+  --returned-color:  #16a34a;
+  --net-color:       #d97706;
+
+  --phase-l1: #6366f1;
+  --phase-l2: #0ea5e9;
+  --phase-l3: #f97316;
+
+  --radius:   14px;
+  --radius-sm: 8px;
+  --shadow:        0 4px 24px rgba(0, 0, 0, 0.08);
+  --shadow-hover:  0 8px 32px rgba(0, 0, 0, 0.13);
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+  --header-bg-glass:      rgba(243, 245, 250, 0.88);
+  --chart-grid:           rgba(0, 0, 0, 0.06);
+  --chart-tooltip-bg:     rgba(255, 255, 255, 0.97);
+  --chart-tooltip-border: rgba(0, 0, 0, 0.10);
+  --chart-tooltip-title:  #1a1d2e;
+  --chart-tooltip-body:   #6b7490;
+
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 16px;
+  color-scheme: light;
+
+  /* Wye diagram — line-to-line differential and neutral colours */
+  --wye-l12: #a78bfa;     /* violet */
+  --wye-l13: #34d399;     /* emerald */
+  --wye-l23: #fbbf24;     /* amber */
+  --wye-neutral: #f43f5e; /* rose — neutral offset indicator */
+}
+
+/* ── Dark theme ── */
+[data-theme="dark"] {
+  --bg:          #0d0f14;
+  --surface:     #161a22;
+  --surface-2:   #1e2330;
+  --border:      rgba(255, 255, 255, 0.07);
+
+  --text:        #e8eaf0;
+  --text-muted:  #6b7490;
+  --text-dim:    #3d4460;
+
+  --accent-blue:   #3b82f6;
+  --accent-green:  #22c55e;
+  --accent-amber:  #f59e0b;
+  --accent-red:    #ef4444;
+  --accent-purple: #a855f7;
+
+  --delivered-color: #3b82f6;
+  --returned-color:  #22c55e;
+  --net-color:       #f59e0b;
+
+  --phase-l1: #818cf8;
+  --phase-l2: #38bdf8;
+  --phase-l3: #fb923c;
+
+  --shadow:        0 4px 24px rgba(0, 0, 0, 0.40);
+  --shadow-hover:  0 8px 32px rgba(0, 0, 0, 0.50);
+
+  --header-bg-glass:      rgba(13, 15, 20, 0.85);
+  --chart-grid:           rgba(255, 255, 255, 0.04);
+  --chart-tooltip-bg:     rgba(22, 26, 34, 0.95);
+  --chart-tooltip-border: rgba(255, 255, 255, 0.10);
+  --chart-tooltip-title:  #e8eaf0;
+  --chart-tooltip-body:   #9ca3af;
+
+  color-scheme: dark;
+}
+
+/* ── Auto theme: follow OS preference ── */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --bg:          #0d0f14;
+    --surface:     #161a22;
+    --surface-2:   #1e2330;
+    --border:      rgba(255, 255, 255, 0.07);
+    --text:        #e8eaf0;
+    --text-muted:  #6b7490;
+    --text-dim:    #3d4460;
+    --accent-blue:   #3b82f6;
+    --accent-green:  #22c55e;
+    --accent-amber:  #f59e0b;
+    --accent-red:    #ef4444;
+    --accent-purple: #a855f7;
+    --delivered-color: #3b82f6;
+    --returned-color:  #22c55e;
+    --net-color:       #f59e0b;
+    --phase-l1: #818cf8;
+    --phase-l2: #38bdf8;
+    --phase-l3: #fb923c;
+    --shadow:        0 4px 24px rgba(0, 0, 0, 0.40);
+    --shadow-hover:  0 8px 32px rgba(0, 0, 0, 0.50);
+    --header-bg-glass:      rgba(13, 15, 20, 0.85);
+    --chart-grid:           rgba(255, 255, 255, 0.04);
+    --chart-tooltip-bg:     rgba(22, 26, 34, 0.95);
+    --chart-tooltip-border: rgba(255, 255, 255, 0.10);
+    --chart-tooltip-title:  #e8eaf0;
+    --chart-tooltip-body:   #9ca3af;
+    color-scheme: dark;
+  }
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+/* ── Header ── */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--header-bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.range-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.range-select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+}
+
+.range-select:focus {
+  border-color: var(--accent-blue);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-mark {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--accent-amber), var(--accent-red));
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.logo-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+/* ── Connection status indicator ── */
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background var(--transition);
+}
+
+.status-dot.connected    { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); animation: pulse 2s infinite; }
+.status-dot.disconnected { background: var(--accent-red); }
+.status-dot.connecting   { background: var(--accent-amber); animation: pulse 1s infinite; }
+
+/*
+ * Inverter operating-state colours — applied on top of the connection state
+ * once the first SSE data packet arrives.
+ *
+ *   inv-normal  Bright green + glow: PV / battery actively on-grid.
+ *   inv-bypass  Dark green: power routed through bypass relay (no conversion).
+ *   inv-fault   Red: hardware or protection fault active.
+ *   inv-other   Amber: standby, self-test, upgrade, off-grid, or unknown.
+ */
+.status-dot.inv-normal { background: var(--accent-green);  box-shadow: 0 0 10px var(--accent-green); animation: pulse 2s infinite; }
+.status-dot.inv-bypass { background: #166534;              box-shadow: none; animation: none; }
+.status-dot.inv-fault  { background: var(--accent-red);    box-shadow: 0 0 10px var(--accent-red);   animation: pulse 0.8s infinite; }
+.status-dot.inv-other  { background: var(--accent-amber);  box-shadow: none; animation: none; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── Main layout ── */
+.main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 20px 24px 64px;   /* top reduced: chrome provides spacing */
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+/* ── Screen-reader only ── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* Summary strip no longer needs a negative margin; it lives in sticky-chrome. */
+.section--summary {
+  margin-bottom: 0;
+}
+
+.summary-strip {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.summary-item {
+  flex: 1;
+  padding: 14px 20px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summary-item:last-child { border-right: none; }
+
+.summary-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.summary-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.summary-value--sm {
+  font-size: 0.85rem;
+}
+
+.summary-unit {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+
+/* ── Header clock ── */
+.header-time {
+  font-size: 0.8rem;
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* ── Summary table (2 columns: energy | delta) ── */
+
+.summary-table {
+  border-collapse: collapse;
+}
+
+.summary-table td {
+  padding: 1px 6px 1px 0;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.st-label {
+  font-size: 0.60rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding-right: 6px;
+}
+
+/** Main energy cell: large bold value with unit as inline text. */
+.st-energy {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/** T1/T2 and device detail rows: smaller and muted. */
+.st-energy--sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.st-delta {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  padding-left: 8px;
+}
+
+.energy-delta--pos { color: var(--delivered-color); }
+.energy-delta--neg { color: var(--returned-color); }
+
+.summary-item-header {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/** Optional model name rendered inline in the device box header. */
+.header-device-model {
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+
+/* ── Power card (display + chart merged) ── */
+
+/** The chart-card#power-display gets a coloured left border
+ *  via the --import / --export modifier classes set by JS. */
+.chart-card#power-display {
+  border-left-width: 3px;
+  border-left-style: solid;
+  border-left-color: var(--border);
+  transition: border-color 0.3s;
+}
+
+.chart-card#power-display.power-display--import { border-left-color: var(--delivered-color); }
+.chart-card#power-display.power-display--export { border-left-color: var(--returned-color); }
+
+/** Compact header row: direction label + large watt value inline. */
+.power-card-header {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 14px;
+}
+
+.power-card-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.power-direction {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  transition: color 0.3s;
+}
+
+.power-display--import .power-direction { color: var(--delivered-color); }
+.power-display--export .power-direction { color: var(--returned-color); }
+
+.power-value {
+  font-size: 2.4rem;
+  font-weight: 700;
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--text);
+  transition: color 0.3s;
+}
+
+.power-display--import .power-value { color: var(--delivered-color); }
+.power-display--export .power-value { color: var(--returned-color); }
+
+.power-unit {
+  font-size: 1.0rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/** In/out kWh deltas for the selected history window. */
+.power-card-deltas {
+  display: flex;
+  gap: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: "JetBrains Mono", monospace;
+  min-height: 1.1em;
+}
+
+.power-delta-in  { color: var(--delivered-color); }
+.power-delta-out { color: var(--returned-color); }
+
+/* ── Section ── */
+.section-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+/** Muted inline annotation inside a section-title (e.g. "−200 V display base"). */
+.section-subtitle {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim);
+  margin-left: 0.5em;
+}
+
+.section-hint {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── Card grid ── */
+.cards-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.cards-row--three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* ── Card ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 24px 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+
+/* Accent left-edge glow */
+.card--delivered::before { content: ""; position: absolute; inset: 0; border-left: 3px solid var(--delivered-color); border-radius: var(--radius) 0 0 var(--radius); pointer-events: none; }
+.card--returned::before  { content: ""; position: absolute; inset: 0; border-left: 3px solid var(--returned-color);  border-radius: var(--radius) 0 0 var(--radius); pointer-events: none; }
+.card--net::before       { content: ""; position: absolute; inset: 0; border-left: 3px solid var(--net-color);       border-radius: var(--radius) 0 0 var(--radius); pointer-events: none; }
+
+.card-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  margin-bottom: 8px;
+  opacity: 0.6;
+}
+
+.card--delivered .card-icon { color: var(--delivered-color); }
+.card--returned  .card-icon { color: var(--returned-color); }
+.card--net       .card-icon { color: var(--net-color); }
+
+.card-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.card-value {
+  font-size: 2.6rem;
+  font-weight: 700;
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--text);
+  transition: color 0.15s;
+}
+
+.card--delivered .card-value { color: var(--delivered-color); }
+.card--returned  .card-value { color: var(--returned-color); }
+.card--net       .card-value { color: var(--net-color); }
+
+.card-unit {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.card-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* Progress bar inside card */
+.card-bar-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--surface-2);
+  border-radius: 0 0 var(--radius) var(--radius);
+  overflow: hidden;
+}
+
+.card-bar-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0 2px 0 0;
+}
+
+.card--delivered .card-bar-fill { background: linear-gradient(90deg, var(--delivered-color), #60a5fa); }
+.card--returned  .card-bar-fill { background: linear-gradient(90deg, var(--returned-color), #4ade80); }
+
+/* Phase cards */
+.card--phase {
+  padding: 20px;
+  text-align: center;
+}
+
+.phase-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 99px;
+  margin-bottom: 12px;
+}
+
+/* Colour L1/L2/L3 for voltage cards */
+#card-v-l1 .phase-badge, #card-c-l1 .phase-badge {
+  background: rgba(129, 140, 248, 0.15);
+  color: var(--phase-l1);
+}
+#card-v-l2 .phase-badge, #card-c-l2 .phase-badge {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--phase-l2);
+}
+#card-v-l3 .phase-badge, #card-c-l3 .phase-badge {
+  background: rgba(251, 146, 60, 0.15);
+  color: var(--phase-l3);
+}
+
+#card-v-l1 .card-value, #card-c-l1 .card-value { color: var(--phase-l1); }
+#card-v-l2 .card-value, #card-c-l2 .card-value { color: var(--phase-l2); }
+#card-v-l3 .card-value, #card-c-l3 .card-value { color: var(--phase-l3); }
+
+/* ── Chart card (full-width, below each section's cards) ── */
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 20px 14px;
+  box-shadow: var(--shadow);
+  margin-top: 16px;
+}
+
+.chart-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.chart-legend {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  gap: 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.leg {
+  display: inline-block;
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.leg.delivered { background: var(--delivered-color); }
+.leg.returned  { background: var(--returned-color); }
+.leg.net       { background: var(--net-color); }
+.leg.l1 { background: var(--phase-l1); }
+.leg.l2 { background: var(--phase-l2); }
+.leg.l3 { background: var(--phase-l3); }
+
+/* Dynamic power direction label */
+.power-dir {
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: color 0.3s;
+}
+.power-dir--delivered { color: var(--delivered-color); }
+.power-dir--returned  { color: var(--returned-color); }
+
+.chart-wrapper {
+  position: relative;
+  height: 240px;
+  width: 100%;
+}
+
+/* Compact inline chart inside a phase card */
+.chart-wrapper--inline {
+  height: 144px;
+  margin-top: 14px;
+}
+
+.chart-wrapper canvas {
+  /* Let Chart.js control dimensions — no height here. */
+  display: block;
+}
+
+/* Voltage phase cards with inline chart */
+.card--with-chart {
+  text-align: left;
+}
+
+.phase-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.phase-value-group {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.card--with-chart .phase-badge {
+  margin-bottom: 0;
+}
+
+/* Four-column totals row */
+.cards-row--four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 900px) {
+  .cards-row--four { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Cumulative total cards */
+.card--total .card-value {
+  font-size: 1.6rem;
+}
+
+/* Device info card */
+.card--device {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.device-info {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.device-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  gap: 8px;
+}
+
+.device-key {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.device-val {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  text-align: right;
+  word-break: break-all;
+}
+
+/* ── Footer ── */
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 14px 24px;
+  margin-top: auto;
+}
+
+
+/* ── Flash animation for value updates ── */
+@keyframes value-flash {
+  0%   { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.value-updated {
+  animation: value-flash 0.3s ease-out;
+}
+
+/* ── Sticky chrome: summary strip + tab bar ── */
+
+/*
+ * .sticky-chrome wraps the summary strip and the tab bar, sitting directly
+ * after <header> in the DOM.  Both are full-width, glass-blurred, and sticky
+ * as a unit so the entire navigation chrome stays on screen while scrolling.
+ *
+ * --header-h tracks the header height and is used as the sticky offset.
+ * On desktop the header is always 60 px; JS or a resize observer can update
+ * this variable if it ever becomes dynamic.
+ */
+:root { --header-h: 60px; }
+
+.sticky-chrome {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 90;
+  background: var(--header-bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  /* Extend full width — chrome is not inside .main's max-width container. */
+  width: 100%;
+}
+
+/* Inner wrapper: mirrors .main's max-width constraint so summary strip and
+ * tab bar are horizontally aligned with the card content below. */
+.sticky-chrome-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Summary strip: add top spacing inside chrome; remove card-level shadow
+ * (the chrome background replaces the raised card look). */
+.sticky-chrome .summary-strip {
+  padding-top: 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Tab bar: padding-left/right zeroed because .sticky-chrome-inner already
+ * provides the 24px indent that matches .main. */
+.sticky-chrome .tab-bar {
+  padding-left: 0;
+  padding-right: 0;
+  margin-bottom: 0;
+  border-bottom: none; /* chrome border-bottom serves this purpose */
+}
+
+/* ── Responsive ── */
+
+/* Tablet (≤ 960 px) */
+@media (max-width: 960px) {
+  .cards-row--four { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Mobile landscape / small tablet (≤ 768 px) */
+@media (max-width: 768px) {
+  /* Header: allow controls row to wrap on narrow viewports. */
+  .header-inner {
+    height: auto;
+    min-height: 56px;
+    padding: 10px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .header-controls {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* Hide the clock — saves horizontal space; timestamp is low-priority on mobile. */
+  .header-time { display: none; }
+
+  /* Update sticky offset to match shorter header on mobile. */
+  :root { --header-h: 56px; }
+
+  /* Summary strip: 2 × 2 grid instead of a single horizontal row. */
+  .summary-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .summary-item {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .summary-item:nth-child(odd)  { border-right: 1px solid var(--border); }
+  .summary-item:nth-last-child(-n+2) { border-bottom: none; }
+
+  /* Unpin the full sticky-chrome on mobile: summary strip scrolls away with
+   * the page, saving precious screen height. Push it down by the tab bar
+   * height so the summary strip clears the fixed tab bar above it. */
+  .sticky-chrome {
+    position: static;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+    border-bottom: none;
+    padding-top: var(--tab-bar-h, 44px);
+  }
+
+  /* Tab bar: position:fixed so it stays at the top regardless of
+   * containing-block height (position:sticky fails when the containing
+   * block is only as tall as the chrome itself). */
+  :root { --tab-bar-h: 44px; }
+  .sticky-chrome .tab-bar {
+    position: fixed;
+    top: var(--header-h, 56px);
+    left: 0;
+    right: 0;
+    z-index: 90;
+    padding-left:  16px;
+    padding-right: 16px;
+    background: var(--header-bg-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* Negate the margin-bottom reset from global .sticky-chrome .tab-bar */
+    margin-bottom: 0;
+  }
+  .sticky-chrome .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-btn { white-space: nowrap; flex-shrink: 0; }
+
+  /* Main layout tightening; extra top padding compensates for the fixed tab bar. */
+  .main { padding: calc(var(--tab-bar-h) + 16px) 16px 48px; gap: 20px; }
+
+  /* Cards: single column on mobile — sparklines stack vertically. */
+  .cards-row,
+  .cards-row--three,
+  .cards-row--four  { grid-template-columns: 1fr; }
+
+  .card-value { font-size: 2rem; }
+  .logo-sub   { display: none; }
+
+  /* Wye diagram: stack canvas above stats table on small screens. */
+  .wye-layout { flex-direction: column; }
+  .wye-diagram-wrap { min-height: 220px; }
+  .wye-stats { flex-direction: row; flex-wrap: wrap; }
+  .wye-stats-group { min-width: 240px; flex: 1; }
+}
+
+/* Mobile portrait (≤ 480 px): summary to single column (already single-col cards). */
+@media (max-width: 480px) {
+  /* Summary strip: single column. */
+  .summary-strip { grid-template-columns: 1fr; }
+  .summary-item { border-right: none; }
+  .summary-item:nth-child(odd) { border-right: none; }
+  .summary-item:nth-last-child(-n+2) { border-bottom: 1px solid var(--border); }
+  .summary-item:last-child { border-bottom: none; }
+}
+
+/* High-DPI / large desktop (≥ 1440 px): slightly more generous page padding. */
+@media (min-width: 1440px) {
+  .sticky-chrome-inner { padding-left: 40px; padding-right: 40px; }
+  .main { padding-left: 40px; padding-right: 40px; }
+  .header-inner { padding: 0 40px; }
+}
+
+/* ── Flip annotation tooltip ── */
+.flip-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 200;
+  background: var(--chart-tooltip-bg);
+  border: 1px solid var(--chart-tooltip-border);
+  border-radius: 6px;
+  padding: 7px 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.ft-dir {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--chart-tooltip-title);
+  margin-bottom: 2px;
+}
+
+.ft-ts {
+  font-size: 0.68rem;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--chart-tooltip-body);
+}
+
+/* ── Theme toggle button ── */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition),
+              background var(--transition);
+  white-space: nowrap;
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent-blue);
+}
+
+/* ── 3-phase wye phasor diagram ── */
+
+/*
+ * Colours for the six line-to-line differential vectors.
+/** Outer card layout: diagram left, stats right. */
+.wye-card {
+  padding: 20px;
+}
+
+.wye-layout {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 32px;
+  align-items: center;
+}
+
+/** Canvas container — height is set dynamically by resizeWyeCanvas() so it
+ * clips exactly at the 253 V ring bottom. min-height guards the pre-JS flash. */
+.wye-diagram-wrap {
+  width: 380px;
+  min-height: 200px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+#wye-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/** Stat panel: flex column — the three groups stacked vertically. */
+.wye-stats {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 24px;
+  padding: 20px;
+}
+
+/** Each thematic group within .wye-stats. */
+.wye-stats-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wye-stats-header {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/** Stat table inside each group. */
+.wye-table {
+  border-collapse: collapse;
+  /*
+   * fixed layout + explicit column widths below ensure the three independent
+   * tables (Phase voltages, Line differentials) align their columns visually.
+   */
+  table-layout: fixed;
+  width: 100%;
+}
+
+.wye-table td {
+  padding: 3px 0;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/** Phase/line label column — fixed width so all tables align. */
+.wt-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 80px;
+}
+
+/** Numeric value column — right-aligned, fixed width. */
+.wt-val {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.0rem;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+  width: 68px;
+}
+
+/** Unit column — narrow, left-padded. */
+.wt-unit {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding-left: 6px;
+  width: 24px;
+}
+
+/**
+ * Delta/annotation column — fills remaining space.
+ * Positive delta = above reference (green), negative = below (red).
+ */
+.wt-ideal {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  padding-left: 10px;
+}
+
+.wt-ideal--pos { color: var(--accent-green); }
+.wt-ideal--neg { color: var(--accent-red); }
+
+/** Small coloured dot used as a legend swatch in stat rows. */
+.wye-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wye-dot--l1  { background: var(--phase-l1); }
+.wye-dot--l2  { background: var(--phase-l2); }
+.wye-dot--l3  { background: var(--phase-l3); }
+.wye-dot--l12 { background: var(--wye-l12); }
+.wye-dot--l13 { background: var(--wye-l13); }
+.wye-dot--l23 { background: var(--wye-l23); }
+
+/**
+ * Table cell holding the mini neutral-offset canvas (rowspan=3 in the
+ * Neutral offset table, 4th column, aligned with the ideal-delta column).
+ * Vertical alignment and no extra padding so the canvas fills cleanly.
+ */
+.wt-canvas-cell {
+  vertical-align: middle;
+  padding: 4px 0 4px 8px;
+}
+
+/** Mini polar canvas container: fixed 120×120 px square. */
+.wye-neutral-mini-wrap {
+  width: 120px;
+  height: 120px;
+}
+
+/**
+ * Absorber row td: gives the empty 4th row enough height so the 3 data rows
+ * stay at their natural height when the canvas rowspan covers all four.
+ * Tune if row font-size changes: value ≈ canvas_height − (3 × row_height).
+ */
+.wt-absorber {
+  height: 50px;
+  padding: 0;
+}
+
+#wye-neutral-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/** Responsive: collapse to single column on narrow viewports. */
+@media (max-width: 860px) {
+  .wye-layout {
+    grid-template-columns: 1fr;
+  }
+  .wye-diagram-wrap {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+}
+
+/* ── Spot price panel ─────────────────────────────────────────────────── */
+
+.price-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-value--low  { color: var(--color-ok,   #34c77b); }
+.price-value--mid  { color: var(--color-warn,  #f0a500); }
+.price-value--high { color: var(--color-alert, #e05d5d); }
+
+.price-origin-badge {
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+  margin-left: 0.3em;
+}
+
+.chart-wrapper--cost {
+  height: 220px;
+}
+
+/* ── Tab bar ──────────────────────────────────────────────────────────── */
+
+/* Tab panels inherit the column layout of .main.
+   Scoped to :not([hidden]) so the hidden attribute still hides the panel. */
+[role="tabpanel"]:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin: 0 0 0.5rem;
+  padding: 0 var(--page-pad, 1.5rem);
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: -1px;   /* sit on top of .tab-bar border-bottom */
+  padding: 0.75rem 1.25rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn--active {
+  border-bottom-color: var(--accent-blue);
+  color: var(--text);
+}
+
+/* ── Cost chart net summary row ───────────────────────────────────────── */
+
+.cost-summary-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+}
+
+.cost-summary-sep {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.cost-summary-value {
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+}
+
+.cost-import        { color: var(--delivered-color); }
+.cost-export        { color: var(--returned-color);   }
+.cost-net--positive { color: var(--accent-red);       }
+.cost-net--negative { color: var(--accent-green);     }
+
+/* Cute Flow Diagram CSS */
+.power-flow {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 2rem; margin-bottom: 2rem; position: relative;
+}
+.flow-container {
+  position: relative; height: 300px; width: 800px;  /* fixed 800px coordinate space */
+  transform-origin: top left;
+  will-change: transform;
+}
+
+/*
+ * .flow-scale-wrap clips the scaled .flow-container and provides the
+ * correct layout height after transform. Height is set by JS via the
+ * --flow-scale custom property.
+ */
+.flow-scale-wrap {
+  overflow: hidden;
+  width: 100%;
+  height: calc(300px * var(--flow-scale, 1));
+}
+.flow-node {
+  position: absolute; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; width: 120px; height: 100px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  z-index: 10; font-weight: 500; font-size: 0.9rem;
+}
+.flow-node .icon { font-size: 2rem; margin-bottom: 0.25rem; }
+.flow-node .val { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 1.1rem; margin-top: 0.25rem; }
+
+/* Positions */
+#node-pv { top: 20px; left: 0; }
+#node-inv { top: 20px; left: 340px; border-color: var(--accent-blue); }
+#node-grid { top: 20px; left: 680px; }
+#node-bat { top: 180px; left: 160px; }
+#node-load { top: 180px; left: 520px; }
+
+.flow-lines {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none;
+}
+.flow-line {
+  fill: none; stroke: var(--border); stroke-width: 4; stroke-dasharray: 8; opacity: 1.0;
+}
+.flow-line.active {
+  stroke: var(--accent-blue); opacity: 0.8; animation: flowDash 1s linear infinite;
+}
+.flow-line.export { stroke: var(--returned-color); }
+.flow-line.import { stroke: var(--delivered-color); animation-direction: reverse; }
+.flow-line.charging { stroke: var(--delivered-color); }
+.flow-line.discharging { stroke: var(--returned-color); animation-direction: reverse; }
+
+@keyframes flowDash {
+  to { stroke-dashoffset: -16; }
+}

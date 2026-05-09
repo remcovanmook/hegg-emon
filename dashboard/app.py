@@ -43,7 +43,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Iterator, Optional
 
-from flask import Flask, Response, jsonify, make_response, send_from_directory, request
+from flask import Flask, Response, jsonify, make_response, render_template, send_from_directory, request
 
 from hegg.store import HeggStore, default_db_path, get_store
 
@@ -64,8 +64,12 @@ _store: Optional[HeggStore] = None
 
 @app.route("/", methods=["GET"])
 def index() -> Response:
-    """Render the main dashboard page."""
-    return send_from_directory("static", "dashboard.html")
+    """Render the main dashboard page via Jinja template."""
+    return render_template(
+        "dashboard.html",
+        logo_text="Hegg",
+        logo_sub="Energy Monitor",
+    )
 
 
 @app.route("/api/latest", methods=["GET"])

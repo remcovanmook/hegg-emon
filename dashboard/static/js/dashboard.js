@@ -19,37 +19,12 @@
 
 "use strict";
 
-/* ── Palette ───────────────────────────────────────────────────────────── */
-
 /**
- * Return the current chart palette by reading computed CSS custom properties.
- * Called at init and after every theme change so chart line colours track
- * the active theme's accent values.
- * @returns {{delivered:string, returned:string, net:string, l1:string, l2:string, l3:string}}
+ * Mutable palette reference; chartPalette() is provided by shared/chart-utils.js.
+ * Initialised here so it is ready before DOMContentLoaded.
  */
-function chartPalette() {
-  const s = getComputedStyle(document.documentElement);
-  const v = name => s.getPropertyValue(name).trim();
-  return {
-    delivered: v("--delivered-color"),
-    returned:  v("--returned-color"),
-    net:       v("--net-color"),
-    l1:        v("--phase-l1"),
-    l2:        v("--phase-l2"),
-    l3:        v("--phase-l3"),
-  };
-}
-
-/** Mutable palette reference used by chart init and recolor. */
 let COLORS = chartPalette();
 
-/**
- * Cached CSS custom-property values used by the wye canvas draw functions.
- * Updated by recolorCharts() whenever the theme changes so the per-second
- * draw path never needs to call getComputedStyle itself.
- * @type {object}
- */
-let WYE_CSS = {};
 
 /* ── Taxes & Tariffs (NL defaults) ─────────────────────────────────────── */
 
@@ -316,42 +291,9 @@ function yieldToMain() {
   return new Promise(resolve => setTimeout(resolve, 0));
 }
 
-/* ── Theme management ───────────────────────────────────────────────────────── */
+/* Theme management is provided by shared/theme.js.
+ * (THEME_CYCLE, THEME_LABELS, isDarkTheme, applyTheme, cycleTheme) */
 
-const THEME_CYCLE  = ["light", "dark", "auto"];
-const THEME_LABELS = { light: "☀️ Light", dark: "🌙 Dark", auto: "◐ Auto" };
-
-/**
- * Return true when the currently active computed theme is dark.
- * Handles explicit dark and auto-dark (OS preference).
- * @returns {boolean}
- */
-function isDarkTheme() {
-  const t = document.documentElement.dataset.theme;
-  if (t === "dark") return true;
-  if (t === "auto") return globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
-  return false;
-}
-
-/**
- * Apply *theme* ('light' | 'dark' | 'auto'), persist to localStorage,
- * and update the toggle button label.
- * @param {string} theme
- */
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  localStorage.setItem("hegg-theme", theme);
-  const btn = document.getElementById("theme-toggle");
-  if (btn) btn.textContent = THEME_LABELS[theme] ?? theme;
-  recolorCharts();
-}
-
-/** Advance to the next theme in the cycle. */
-function cycleTheme() {
-  const current = document.documentElement.dataset.theme || "light";
-  const next    = THEME_CYCLE[(THEME_CYCLE.indexOf(current) + 1) % THEME_CYCLE.length];
-  applyTheme(next);
-}
 
 /**
  * Update Chart.js colour options to match the active theme.
@@ -369,19 +311,8 @@ function recolorCharts() {
   const tipTtl  = v("--chart-tooltip-title");
   const tipBdy  = v("--chart-tooltip-body");
 
-  // Refresh the wye CSS cache so canvas draws don't need getComputedStyle.
-  WYE_CSS = {
-    cl1:     v("--phase-l1"),
-    cl2:     v("--phase-l2"),
-    cl3:     v("--phase-l3"),
-    cl12:    v("--wye-l12"),
-    cl13:    v("--wye-l13"),
-    cl23:    v("--wye-l23"),
-    neutral: v("--wye-neutral"),
-    grid:    grid,
-    text:    tick,
-    dim:     v("--text-dim"),
-  };
+  // Refresh the wye CSS cache so canvas draws use updated palette.
+  refreshWyeCSS();
 
   // Refresh the mutable palette so newly-pushed data points use updated colours.
   Object.assign(COLORS, chartPalette());
@@ -481,6 +412,9 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("tab-btn-electricity").addEventListener("click", () => switchTab("electricity"));
   document.getElementById("tab-btn-usage").addEventListener("click",       () => switchTab("usage"));
   document.getElementById("tab-btn-forecast").addEventListener("click",    () => switchTab("forecast"));
+
+  // Restore last active tab (or default to electricity).
+  switchTab(localStorage.getItem("hegg-tab") || "electricity");
 
   // Minute-level refresh for absolute values; device info is static.
   setInterval(loadSummary, 60_000);
@@ -1009,29 +943,29 @@ function setEnergyDelta(id, value, period, unit) {
   e.className   = `energy-delta ${value >= 0 ? "energy-delta--pos" : "energy-delta--neg"}`;
 }
 
-/* ── Tab switching ──────────────────────────────────────────────────────── */
+/* ── Tab management ─────────────────────────────────────────────── */
+// switchTab() is provided by shared/chart-utils.js and dispatches
+// 'dashboard:tabswitch'.  App-specific chart resize and localStorage
+// persistence are handled in the listener below.
 
-/** IDs of all tab panels and their corresponding button IDs. */
-const TAB_IDS = ["electricity", "usage", "forecast"];
+document.addEventListener("dashboard:tabswitch", ({ detail }) => {
+  localStorage.setItem("hegg-tab", detail.id);
+  // Chart.js cannot measure a hidden canvas; resize after the panel is revealed.
+  if (detail.id === "usage") {
+    [usageChart, costChart, gasChart, gasCostChart].forEach(c => {
+      if (c) { c.resize(); c.update("none"); }
+    });
+  } else if (detail.id === "forecast") {
+    [forecastElecChart, forecastGasChart, forecastTempChart, forecastSolarChart].forEach(c => {
+      if (c) { c.resize(); c.update("none"); }
+    });
+  } else {
+    [powerChart, ...voltageCharts, ...currentCharts].forEach(c => {
+      if (c) { c.resize(); c.update("none"); }
+    });
+  }
+});
 
-/**
- * Activate the named tab panel and deactivate all others.
- *
- * After showing the Usage & Cost panel, resizes the Chart.js instances
- * inside it so they fill their containers correctly.
- *
- * @param {string} tabId - One of the IDs in TAB_IDS.
- */
-function switchTab(tabId) {
-  for (const id of TAB_IDS) {
-    const panel = document.getElementById(`tab-${id}`);
-    const btn   = document.getElementById(`tab-btn-${id}`);
-    const active = id === tabId;
-    if (panel) panel.hidden = !active;
-    if (btn) {
-      btn.classList.toggle("tab-btn--active", active);
-      btn.setAttribute("aria-selected", active);
-    }
   }
   // Chart.js cannot measure a hidden element; resize after reveal.
   // Also force a data repaint so any updates that arrived while the
@@ -1851,64 +1785,8 @@ function applyXAxisConfig() {
  * @param {number} [maxIntervals=5]
  * @returns {{ min: number, max: number, step: number }}
  */
-function niceScale(rawMin, rawMax, maxIntervals = 5) {
-  if (!Number.isFinite(rawMin) || !Number.isFinite(rawMax) || rawMin === rawMax) {
-    // Degenerate range: expand by one unit so at least one grid line exists.
-    return { min: Math.floor(rawMin) - 1, max: Math.ceil(rawMax) + 1, step: 1 };
-  }
-  const range     = rawMax - rawMin;
-  const roughStep = range / maxIntervals;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
-  const norm      = roughStep / magnitude;
-  let step;
-  if (norm <= 1)      { step = magnitude; }
-  else if (norm <= 2) { step = 2 * magnitude; }
-  else if (norm <= 5) { step = 5 * magnitude; }
-  else                { step = 10 * magnitude; }
-  return {
-    min:  Math.floor(rawMin / step) * step,
-    max:  Math.ceil(rawMax  / step) * step,
-    step,
-  };
-}
-
-/**
- * Compute the union Y-axis range across all per-phase extremes, apply a nice
- * scale to it, and push the same min/max/stepSize to every chart in the group
- * so L1/L2/L3 remain visually comparable.
- *
- * The nice scale algorithm picks a step from {1, 2, 5, 10} × 10ⁿ that keeps
- * the number of tick intervals ≤ 5, then rounds min/max outward to clean
- * multiples of that step.  ticks.stepSize is written directly so Chart.js
- * places grid lines at those positions regardless of maxTicksLimit.
- *
- * @param {import('chart.js').Chart[]} charts
- * @param {{min:number, max:number}[]} perPhaseExtremes
- * @param {number} [minFloor=-Infinity] - Hard lower bound for the Y minimum
- *   (pass 0 for current charts to prevent the axis going below zero).
- */
-function syncChartScales(charts, perPhaseExtremes, minFloor = -Infinity) {
-  let globalMin = Infinity, globalMax = -Infinity;
-  perPhaseExtremes.forEach(e => {
-    if (e.min < globalMin) globalMin = e.min;
-    if (e.max > globalMax) globalMax = e.max;
-  });
-  if (!Number.isFinite(globalMin) || !Number.isFinite(globalMax)) return;
-
-  // Clamp the raw lower bound before computing the nice scale so that the
-  // floor is reflected in the rounding, not just clamped after the fact.
-  const clampedMin = Math.max(minFloor, globalMin);
-  const { min, max, step } = niceScale(clampedMin, globalMax);
-  const niceMin = Math.max(minFloor, min);
-
-  charts.forEach(c => {
-    c.options.scales.y.min  = niceMin;
-    c.options.scales.y.max  = max;
-    // Drive grid line positions via stepSize; maxTicksLimit is set high
-    // enough in makeInlineOpts not to prune these ticks.
-    c.options.scales.y.ticks.stepSize = step;
-  });
-}
+/* Y-axis scaling: niceScale() and syncChartScales() are provided by
+ * shared/chart-utils.js.  updateInlineScale is hegg-emon-specific. */
 
 /**
  * Set the Y scale min/max with padding so data lines are never flush with
@@ -2019,614 +1897,12 @@ function updateVoltageAnnotation(phaseIndex) {
   };
 }
 
-/* ── 3-phase wye phasor diagram ─────────────────────────────────────────── */
 
-/**
- * Compute the magnitude of the line-to-line voltage between two phases,
- * assuming the two phasors are separated by 120° in the ideal wye arrangement.
- *
- * Uses the cosine rule:
- *   |Va - Vb|² = Va² + Vb² - 2·Va·Vb·cos(120°)
- *              = Va² + Vb² + Va·Vb          (since cos 120° = -0.5)
- *
- * @param {number} va - Phase-to-neutral magnitude of the first phase (V).
- * @param {number} vb - Phase-to-neutral magnitude of the second phase (V).
- * @returns {number} Line voltage magnitude in volts.
- */
-function lineVoltage(va, vb) {
-  return Math.sqrt(va * va + vb * vb + va * vb);
-}
+/* ── Wye phasor diagram ─────────────────────────────────────────────────── */
+// lineVoltage, neutralShift, voltageImbalance, initWyeDiagram,
+// resizeWyeCanvas, resizeNeutralCanvas, drawWyeDiagram, drawNeutralMini,
+// and updateWyeDiagram are all provided by shared/wye.js.
+//
+// hegg-emon passes (v1, v2, v3) to updateWyeDiagram; the shared function
+// calculates L-L values via lineVoltage() when no measured value is supplied.
 
-/**
- * Compute the complex neutral shift relative to the system ground.
- *
- * With a wye system where the three phase voltages have magnitudes V1, V2, V3
- * and nominal 120° spacing, the neutral point is the centroid of the three
- * phasor tips in the complex plane.  In a balanced system this is zero.
- *
- * Angles: L1 = 0°, L2 = -120°, L3 = +120°  (standard rotation convention).
- *
- * @param {number} v1 - L1 magnitude.
- * @param {number} v2 - L2 magnitude.
- * @param {number} v3 - L3 magnitude.
- * @returns {{ re: number, im: number }} Real and imaginary parts of neutral shift.
- */
-function neutralShift(v1, v2, v3) {
-  const deg120 = (2 * Math.PI) / 3;
-  const re = (v1 + v2 * Math.cos(-deg120) + v3 * Math.cos(deg120)) / 3;
-  const im = (v2 * Math.sin(-deg120) + v3 * Math.sin(deg120)) / 3;
-  return { re, im };
-}
-
-/**
- * Compute per-phase imbalance as a percentage of the mean phase voltage.
- * Uses the standard NEMA definition: 100 × maxDeviation / mean.
- *
- * @param {number} v1
- * @param {number} v2
- * @param {number} v3
- * @returns {number} Voltage imbalance factor (%).
- */
-function voltageImbalance(v1, v2, v3) {
-  const mean = (v1 + v2 + v3) / 3;
-  if (mean === 0) return 0;
-  const maxDev = Math.max(Math.abs(v1 - mean), Math.abs(v2 - mean), Math.abs(v3 - mean));
-  return (maxDev / mean) * 100;
-}
-
-/** @type {HTMLCanvasElement|null} */
-let wyeCanvas = null;
-
-/** @type {CanvasRenderingContext2D|null} */
-let wyeCtx = null;
-
-/** @type {HTMLCanvasElement|null} Mini neutral-offset polar canvas. */
-let neutralCanvas = null;
-
-/** @type {CanvasRenderingContext2D|null} */
-let neutralCtx = null;
-
-/**
- * Initialise the wye canvas element.
- * Sets the pixel buffer to twice the CSS size for crisp HiDPI rendering.
- * Called once after DOMContentLoaded (inside initCharts).
- */
-function initWyeDiagram() {
-  wyeCanvas = document.getElementById("wye-canvas");
-  if (!wyeCanvas) return;
-  wyeCtx = wyeCanvas.getContext("2d");
-  resizeWyeCanvas();
-  window.addEventListener("resize", resizeWyeCanvas);
-
-  // Mini neutral-offset canvas.
-  neutralCanvas = document.getElementById("wye-neutral-canvas");
-  if (neutralCanvas) {
-    neutralCtx = neutralCanvas.getContext("2d");
-    resizeNeutralCanvas();
-    window.addEventListener("resize", resizeNeutralCanvas);
-  }
-}
-
-/**
- * Resize the canvas pixel buffer to match the CSS layout dimensions.
- * The device pixel ratio is applied so lines stay sharp on Retina screens.
- */
-function resizeWyeCanvas() {
-  if (!wyeCanvas) return;
-  const dpr  = window.devicePixelRatio || 1;
-  const rect = wyeCanvas.getBoundingClientRect();
-  wyeCanvas.width  = rect.width  * dpr;
-  wyeCanvas.height = rect.height * dpr;
-  wyeCtx.scale(dpr, dpr);
-}
-
-/** Resize the mini neutral-offset canvas pixel buffer (same logic as the main wye canvas). */
-function resizeNeutralCanvas() {
-  if (!neutralCanvas) return;
-  const dpr  = window.devicePixelRatio || 1;
-  const rect = neutralCanvas.getBoundingClientRect();
-  neutralCanvas.width  = rect.width  * dpr;
-  neutralCanvas.height = rect.height * dpr;
-  neutralCtx.scale(dpr, dpr);
-}
-
-/**
- * Draw the complete 3-phase wye phasor diagram onto the canvas.
- *
- * Layout:
- *   - Origin at canvas centre; Y axis flipped (positive = up, electrical convention).
- *   - Phase vectors radiate from origin at 0°, +120°, -120° (L1, L2, L3).
- *   - Ideal balanced reference ring drawn as dashed circle at mean voltage radius.
- *   - Line-to-line (LL) differential arcs drawn between phase tips.
- *   - Neutral offset vector drawn from origin to centroid of phasor tips.
- *   - Labels on each vector tip and the neutral point.
- *
- * @param {number} v1 - L1 RMS voltage.
- * @param {number} v2 - L2 RMS voltage.
- * @param {number} v3 - L3 RMS voltage.
- */
-function drawWyeDiagram(v1, v2, v3) {
-  if (!wyeCtx || !wyeCanvas) return;
-
-  const dpr  = window.devicePixelRatio || 1;
-  const W    = wyeCanvas.width  / dpr;
-  const H    = wyeCanvas.height / dpr;
-  const cx   = W / 2;
-  const cy   = H / 2;
-
-  // Subtract a base voltage so inter-phase differences are amplified visually.
-  // At ~230 V the raw vectors are nearly identical in length; with a 200 V base
-  // the displayed deviations are ~30 V, making a 1 V imbalance ~3 % of the
-  // vector length instead of ~0.4 %.
-  // IEC reference rings and the mean ring use the same offset so they remain
-  // correctly positioned relative to the phasor tips.
-  // Neutral shift is mathematically unaffected (the base cancels in the centroid
-  // calculation) but appears proportionally larger at the expanded scale.
-  const WYE_DISPLAY_OFFSET = 200;
-
-  // Display magnitudes — deviations from the base, floor at 1 to avoid
-  // zero-length vectors if voltage ever dips below the base.
-  const dv1 = Math.max(v1 - WYE_DISPLAY_OFFSET, 1);
-  const dv2 = Math.max(v2 - WYE_DISPLAY_OFFSET, 1);
-  const dv3 = Math.max(v3 - WYE_DISPLAY_OFFSET, 1);
-
-  // IEC 61000-3-3 / EN 50160 tolerance band display values.
-  // Defined here so the scale can be pinned to IEC_HIGH_DISP.
-  const IEC_LOW_DISP  = 207 - WYE_DISPLAY_OFFSET;   //  7 V display
-  const IEC_NOM_DISP  = 230 - WYE_DISPLAY_OFFSET;   // 30 V display
-  const IEC_HIGH_DISP = 253 - WYE_DISPLAY_OFFSET;   // 53 V display
-
-  // Pin the scale to a fixed ceiling above the IEC upper band so rings sit
-  // clearly inside the canvas with room to spare. Using IEC_HIGH_DISP (53)
-  // as the divisor would place the high ring right at the layout boundary;
-  // a ceiling of 265 V (65 display units) leaves ~18 % headroom beyond it.
-  const SCALE_CEIL = 265 - WYE_DISPLAY_OFFSET;   // 65 display V
-  const scale = (Math.min(W, H) * 0.38) / SCALE_CEIL;
-
-  // Use the cached palette populated by recolorCharts() rather than calling
-  // getComputedStyle on every tick (called once per second from SSE).
-  const cl1      = WYE_CSS.cl1     || "#60a5fa";
-  const cl2      = WYE_CSS.cl2     || "#34d399";
-  const cl3      = WYE_CSS.cl3     || "#f59e0b";
-  const cl12     = WYE_CSS.cl12    || "#818cf8";
-  const cl13     = WYE_CSS.cl13    || "#fb7185";
-  const cl23     = WYE_CSS.cl23    || "#a78bfa";
-  const cNeutral = WYE_CSS.neutral || "#f472b6";
-  const cGrid    = WYE_CSS.grid    || "rgba(255,255,255,0.06)";
-  const cText    = WYE_CSS.text    || "#9ca3af";
-  const cTextDim = WYE_CSS.dim     || "#4b5563";
-
-  const ctx = wyeCtx;
-  ctx.clearRect(0, 0, W, H);
-
-  // Helper: electrical angle → canvas (x,y).
-  // 0° is to the right; positive angle is counter-clockwise (standard maths).
-  const toXY = (mag, angleDeg) => {
-    const rad = angleDeg * Math.PI / 180;
-    return {
-      x: cx + mag * scale * Math.cos(rad),
-      y: cy - mag * scale * Math.sin(rad),   // flip Y
-    };
-  };
-
-  // Phasor tip coordinates use display magnitudes; labels show actual voltages.
-  // L1 points straight up (90°), with L2 and L3 at −120° increments:
-  //   L1 = 90°, L2 = −30° (lower-right), L3 = 210° (lower-left).
-  const p1 = toXY(dv1,  90);
-  const p2 = toXY(dv2, -30);
-  const p3 = toXY(dv3, 210);
-
-  const meanDV = (dv1 + dv2 + dv3) / 3;
-  const idealR = meanDV * scale;
-
-  // ── Background grid rings (25 %, 50 %, 75 %, 100 % of display mean) ──
-  for (let frac = 0.25; frac <= 1.01; frac += 0.25) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, idealR * frac, 0, 2 * Math.PI);
-    ctx.strokeStyle = cGrid;
-    ctx.lineWidth   = 1;
-    ctx.setLineDash([]);
-    ctx.stroke();
-  }
-
-  // Spokes at 0°, 60°, 120°… (every 60°) as orientation guides.
-  for (let a = 0; a < 360; a += 60) {
-    const sp = toXY(SCALE_CEIL, a);
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(sp.x, sp.y);
-    ctx.strokeStyle = cGrid;
-    ctx.lineWidth   = 0.5;
-    ctx.stroke();
-  }
-
-  // ── IEC reference rings ──
-  const drawIecRing = (dispV, color, dash, label, labelAngle) => {
-    const r = dispV * scale;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-    ctx.strokeStyle = color;
-    ctx.lineWidth   = 1;
-    ctx.setLineDash(dash);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Small label just outside the ring at the specified angle.
-    const lx = cx + (r + 5) * Math.cos(labelAngle);
-    const ly = cy - (r + 5) * Math.sin(labelAngle);
-    ctx.font      = "9px 'JetBrains Mono', monospace";
-    ctx.fillStyle = color;
-    ctx.textAlign = "center";
-    ctx.fillText(label, lx, ly);
-  };
-
-  // Tolerance bands first (underneath nominal ring).
-  drawIecRing(IEC_LOW_DISP,  "rgba(251,146,60,0.55)",  [3, 3], "207 V",  Math.PI * 0.25);
-  drawIecRing(IEC_HIGH_DISP, "rgba(251,146,60,0.55)",  [3, 3], "253 V",  Math.PI * 0.25);
-  // Nominal ring.
-  drawIecRing(IEC_NOM_DISP,  "rgba(255,255,255,0.30)", [5, 3], "230 V",  Math.PI * 0.2);
-
-  // ── Mean-voltage reference ring (dashed, dim) ──
-  ctx.beginPath();
-  ctx.arc(cx, cy, idealR, 0, 2 * Math.PI);
-  ctx.strokeStyle = cTextDim;
-  ctx.lineWidth   = 1;
-  ctx.setLineDash([4, 4]);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // ── Line-to-line differential chords ──
-  // Chord geometry reflects display magnitudes; labels show calculated LL voltage.
-  const drawChord = (pa, pb, color, label, labelOffset) => {
-    ctx.beginPath();
-    ctx.moveTo(pa.x, pa.y);
-    ctx.lineTo(pb.x, pb.y);
-    ctx.strokeStyle = color;
-    ctx.lineWidth   = 1.5;
-    ctx.setLineDash([6, 3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Midpoint label.
-    const mx = (pa.x + pb.x) / 2 + labelOffset.x;
-    const my = (pa.y + pb.y) / 2 + labelOffset.y;
-    ctx.font      = "bold 9px 'JetBrains Mono', monospace";
-    ctx.fillStyle = color;
-    ctx.textAlign = "center";
-    ctx.fillText(label, mx, my);
-  };
-
-  const llMag12 = lineVoltage(v1, v2);
-  const llMag13 = lineVoltage(v1, v3);
-  const llMag23 = lineVoltage(v2, v3);
-
-  drawChord(p1, p2, cl12, `L1\u2013L2 ${llMag12.toFixed(1)} V`, { x: 14, y: -6 });
-  drawChord(p1, p3, cl13, `L1\u2013L3 ${llMag13.toFixed(1)} V`, { x: -14, y: -6 });
-  drawChord(p2, p3, cl23, `L2\u2013L3 ${llMag23.toFixed(1)} V`, { x: 0, y: 14 });
-
-  // ── Phase voltage vectors ──
-  const drawVector = (p, color, label, mag) => {
-    // Arrow shaft.
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(p.x, p.y);
-    ctx.strokeStyle = color;
-    ctx.lineWidth   = 2.5;
-    ctx.stroke();
-
-    // Arrowhead.
-    const angle = Math.atan2(cy - p.y, p.x - cx);
-    const hs    = 8;
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
-    ctx.lineTo(p.x - hs * Math.cos(angle - 0.35), p.y + hs * Math.sin(angle - 0.35));
-    ctx.lineTo(p.x - hs * Math.cos(angle + 0.35), p.y + hs * Math.sin(angle + 0.35));
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-
-    // Tip dot.
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI);
-    ctx.fillStyle = color;
-    ctx.fill();
-
-    // Label at tip: push outward a bit.
-    const offX = (p.x - cx) * 0.18;
-    const offY = (p.y - cy) * 0.18;
-    ctx.font      = "bold 11px 'Inter', sans-serif";
-    ctx.fillStyle = color;
-    ctx.textAlign = "center";
-    ctx.fillText(`${label} ${mag.toFixed(1)} V`, p.x + offX, p.y + offY);
-  };
-
-  // Pass actual voltages for labels; phasor tips already computed from display magnitudes.
-  drawVector(p1, cl1, "L1", v1);
-  drawVector(p2, cl2, "L2", v2);
-  drawVector(p3, cl3, "L3", v3);
-
-  // ── Neutral offset vector ──
-  // Computed from actual voltages — the display base cancels in the centroid
-  // calculation so the result is identical either way.
-  const ns  = neutralShift(v1, v2, v3);
-  const npx = cx + ns.re * scale;
-  const npy = cy - ns.im * scale;
-
-  // Only draw if the offset is visible (> 0.5 px).
-  const nLen = Math.hypot(npx - cx, npy - cy);
-  if (nLen > 0.5) {
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(npx, npy);
-    ctx.strokeStyle  = cNeutral;
-    ctx.lineWidth    = 2;
-    ctx.setLineDash([3, 2]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.beginPath();
-    ctx.arc(npx, npy, 5, 0, 2 * Math.PI);
-    ctx.fillStyle = cNeutral;
-    ctx.fill();
-  }
-
-  // ── Origin dot ──
-  ctx.beginPath();
-  ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
-  ctx.fillStyle = cText;
-  ctx.fill();
-
-  // ── Centre label: actual mean voltage ──
-  const meanV = (v1 + v2 + v3) / 3;
-  ctx.font      = "10px 'JetBrains Mono', monospace";
-  ctx.fillStyle = cText;
-  ctx.textAlign = "center";
-  ctx.fillText(`mean ${meanV.toFixed(1)} V`, cx, cy - 10);
-
-  // ── Corner note: display base so diagram is not misread as absolute scale ──
-  ctx.font         = "8px 'JetBrains Mono', monospace";
-  ctx.fillStyle    = cTextDim;
-  ctx.textAlign    = "left";
-  ctx.textBaseline = "bottom";
-  ctx.fillText(`\u2212${WYE_DISPLAY_OFFSET} V base`, 6, H - 4);
-  ctx.textBaseline = "alphabetic";
-}
-
-/**
- * Update the wye diagram DOM stat elements and redraw the canvas.
- *
- * Called from applyReading() on every live SSE tick.
- *
- * @param {number} v1 - L1 RMS voltage.
- * @param {number} v2 - L2 RMS voltage.
- * @param {number} v3 - L3 RMS voltage.
- */
-function updateWyeDiagram(v1, v2, v3) {
-  if (!v1 || !v2 || !v3) return;
-
-  // IEC 61000-3-3 / EN 50160 nominal voltage.
-  const IEC_NOM = 230;
-
-  // Phase voltage DOM + delta vs IEC nominal.
-  setText("wye-v-l1", v1.toFixed(1));
-  setText("wye-v-l2", v2.toFixed(1));
-  setText("wye-v-l3", v3.toFixed(1));
-
-  /**
-   * Set a phase-voltage IEC delta cell.
-   * Shows the absolute deviation from 230 V and the percentage in parentheses.
-   * Positive = above nominal (green), negative = below (red).
-   * @param {string} id
-   * @param {number} v
-   */
-  const setPhaseIdeal = (id, v) => {
-    const e = document.getElementById(id);
-    if (!e) return;
-    const delta   = v - IEC_NOM;
-    const pct     = (delta / IEC_NOM) * 100;
-    const sign    = delta >= 0 ? "+" : "";
-    const pctSign = pct   >= 0 ? "+" : "";
-    e.textContent = `${sign}${delta.toFixed(1)} V vs IEC (${pctSign}${pct.toFixed(1)}%)`;
-    e.className   = `wt-ideal ${delta >= 0 ? "wt-ideal--pos" : "wt-ideal--neg"}`;
-  };
-  setPhaseIdeal("wye-ideal-l1", v1);
-  setPhaseIdeal("wye-ideal-l2", v2);
-  setPhaseIdeal("wye-ideal-l3", v3);
-
-  // Line differentials.
-  // IEC 60038 nominal line-to-line voltage for a 230/400 V system.
-  const IEC_LL = 400;
-  const ll12   = lineVoltage(v1, v2);
-  const ll13   = lineVoltage(v1, v3);
-  const ll23   = lineVoltage(v2, v3);
-
-  setText("wye-diff-l12", ll12.toFixed(1));
-  setText("wye-diff-l13", ll13.toFixed(1));
-  setText("wye-diff-l23", ll23.toFixed(1));
-
-  /**
-   * Set a line-differential IEC delta cell.
-   * Shows the absolute deviation from the IEC 60038 nominal VLL (400 V)
-   * and the percentage in parentheses, matching the phase voltage format.
-   * @param {string} id
-   * @param {number} actual - Measured line-to-line voltage.
-   */
-  const setLlIdeal = (id, actual) => {
-    const e = document.getElementById(id);
-    if (!e) return;
-    const delta   = actual - IEC_LL;
-    const pct     = (delta / IEC_LL) * 100;
-    const sign    = delta >= 0 ? "+" : "";
-    const pctSign = pct   >= 0 ? "+" : "";
-    e.textContent = `${sign}${delta.toFixed(1)} V vs IEC (${pctSign}${pct.toFixed(1)}%)`;
-    e.className   = `wt-ideal ${delta >= 0 ? "wt-ideal--pos" : "wt-ideal--neg"}`;
-  };
-  setLlIdeal("wye-ideal-l12", ll12);
-  setLlIdeal("wye-ideal-l13", ll13);
-  setLlIdeal("wye-ideal-l23", ll23);
-
-  // Neutral offset.
-  const ns    = neutralShift(v1, v2, v3);
-  const nMag  = Math.hypot(ns.re, ns.im);
-  // Compass bearing: clockwise from north (top), always 0–360°.
-  // Math.atan2 returns CCW from east; bearing = (90 − math_deg + 360) % 360.
-  const nAngMath = Math.atan2(ns.im, ns.re) * 180 / Math.PI;
-  const nAng     = (((90 - nAngMath) % 360 + 360) % 360).toFixed(1);
-  const imbal = voltageImbalance(v1, v2, v3);
-  setText("wye-neutral-mag", nMag.toFixed(2));
-  setText("wye-neutral-ang", nAng);
-  setText("wye-imbalance",   imbal.toFixed(2));
-
-  // Canvas renders.
-  drawWyeDiagram(v1, v2, v3);
-  drawNeutralMini(ns.re, ns.im, nMag);
-}
-
-/**
- * Draw the mini neutral-offset polar diagram.
- *
- * Shows the neutral shift vector (magnitude and direction) on a small canvas
- * with concentric reference rings so severity can be assessed at a glance.
- *
- * Scale: the outer ring equals maxRef volts, where maxRef is the smallest
- * multiple of 5 V that is ≥ 2 × the current magnitude, with a floor of 5 V.
- * This keeps the vector large enough to read while the axis auto-expands
- * when the offset grows.
- *
- * Phase direction labels (L1 up, L2 lower-right, L3 lower-left) are drawn
- * just outside the outer ring so the viewer can relate the offset angle to
- * which phase is pulling the neutral.
- *
- * @param {number} re  - Real part of neutral shift (V).
- * @param {number} im  - Imaginary part of neutral shift (V).
- * @param {number} mag - Magnitude of neutral shift (V).
- */
-function drawNeutralMini(re, im, mag) {
-  if (!neutralCtx || !neutralCanvas) return;
-
-  const dpr = window.devicePixelRatio || 1;
-  const W   = neutralCanvas.width  / dpr;
-  const H   = neutralCanvas.height / dpr;
-  const cx  = W / 2;
-  const cy  = H / 2;
-
-  // Use the cached palette populated by recolorCharts() — same as drawWyeDiagram.
-  const cN    = WYE_CSS.neutral || "#f472b6";
-  const cGrid = WYE_CSS.grid    || "rgba(255,255,255,0.06)";
-  const cText = WYE_CSS.text    || "#9ca3af";
-  const cDim  = WYE_CSS.dim     || "#4b5563";
-  const cl1   = WYE_CSS.cl1     || "#60a5fa";
-  const cl2   = WYE_CSS.cl2     || "#34d399";
-  const cl3   = WYE_CSS.cl3     || "#f59e0b";
-
-  const ctx = neutralCtx;
-  ctx.clearRect(0, 0, W, H);
-
-  // Adaptive outer ring: smallest 5 V multiple ≥ max(5, 2 × magnitude).
-  const maxRef = Math.max(5, Math.ceil(Math.max(mag * 2, 1) / 5) * 5);
-  const R      = Math.min(W, H) * 0.36;   // outer ring radius in px
-  const scale  = R / maxRef;
-
-  // Background rings at 25 %, 50 %, 75 %, 100 % of maxRef.
-  [0.25, 0.5, 0.75, 1].forEach(frac => {
-    ctx.beginPath();
-    ctx.arc(cx, cy, R * frac, 0, 2 * Math.PI);
-    ctx.strokeStyle = cGrid;
-    ctx.lineWidth   = frac === 1 ? 1 : 0.75;
-    ctx.setLineDash([]);
-    ctx.stroke();
-  });
-
-  // Spokes every 30°.
-  for (let a = 0; a < 360; a += 30) {
-    const rad = a * Math.PI / 180;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + R * Math.cos(rad), cy - R * Math.sin(rad));
-    ctx.strokeStyle = cGrid;
-    ctx.lineWidth   = 0.5;
-    ctx.stroke();
-  }
-
-  // Outer ring scale label at top-right.
-  ctx.font         = "8px 'JetBrains Mono', monospace";
-  ctx.fillStyle    = cDim;
-  ctx.textAlign    = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillText(`${maxRef} V`, cx + R * Math.cos(Math.PI / 4) + 3,
-                               cy - R * Math.sin(Math.PI / 4));
-  ctx.textBaseline = "alphabetic";
-
-  // Phase direction labels just outside the outer ring.
-  // L1 = 90° (up), L2 = −30° (lower-right), L3 = 210° (lower-left).
-  [
-    { label: "L1", angle: 90,  color: cl1 },
-    { label: "L2", angle: -30, color: cl2 },
-    { label: "L3", angle: 210, color: cl3 },
-  ].forEach(({ label, angle, color }) => {
-    const rad = angle * Math.PI / 180;
-    const lx  = cx + (R + 11) * Math.cos(rad);
-    const ly  = cy - (R + 11) * Math.sin(rad);
-    ctx.font         = "bold 8px 'Inter', sans-serif";
-    ctx.fillStyle    = color;
-    ctx.textAlign    = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, lx, ly);
-  });
-  ctx.textBaseline = "alphabetic";
-
-  // Origin dot.
-  ctx.beginPath();
-  ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
-  ctx.fillStyle = cText;
-  ctx.fill();
-
-  // Neutral offset vector — only draw if magnitude produces a visible length.
-  const vx    = cx + re * scale;
-  const vy    = cy - im * scale;
-  const pxLen = Math.hypot(vx - cx, vy - cy);
-
-  if (pxLen > 1.5) {
-    // Shaft: offset point → origin (arrowhead points at the balanced centre).
-    ctx.beginPath();
-    ctx.moveTo(vx, vy);
-    ctx.lineTo(cx, cy);
-    ctx.strokeStyle = cN;
-    ctx.lineWidth   = 2;
-    ctx.setLineDash([]);
-    ctx.stroke();
-
-    // Arrowhead at (cx, cy) — angle from offset point toward centre.
-    const ang = Math.atan2(cy - vy, cx - vx);
-    const hs  = 6;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx - hs * Math.cos(ang - 0.4), cy - hs * Math.sin(ang - 0.4));
-    ctx.lineTo(cx - hs * Math.cos(ang + 0.4), cy - hs * Math.sin(ang + 0.4));
-    ctx.closePath();
-    ctx.fillStyle = cN;
-    ctx.fill();
-
-    // Red dot at the offset point — "you are here".
-    ctx.beginPath();
-    ctx.arc(vx, vy, 5, 0, 2 * Math.PI);
-    ctx.fillStyle = "#ef4444";
-    ctx.fill();
-
-    // Magnitude label nudged outward from the offset point (away from centre).
-    const lx = vx + (vx - cx) * 0.35;
-    const ly = vy + (vy - cy) * 0.35 - 4;
-    ctx.font         = "bold 9px 'JetBrains Mono', monospace";
-    ctx.fillStyle    = cN;
-    ctx.textAlign    = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillText(`${mag.toFixed(2)} V`, lx, ly);
-    ctx.textBaseline = "alphabetic";
-  } else {
-    // Zero (or negligible) offset — draw a centred label.
-    ctx.font      = "9px 'JetBrains Mono', monospace";
-    ctx.fillStyle = cText;
-    ctx.textAlign = "center";
-    ctx.fillText("balanced", cx, cy + 18);
-  }
-}
