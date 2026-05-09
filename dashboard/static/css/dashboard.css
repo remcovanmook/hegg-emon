@@ -816,13 +816,12 @@ html, body {
   width: 100%;
 }
 
-/* Constrain inner content to the same max-width as .main / .header-inner. */
-.sticky-chrome > * {
+/* Inner wrapper: mirrors .main's max-width constraint so summary strip and
+ * tab bar are horizontally aligned with the card content below. */
+.sticky-chrome-inner {
   max-width: 1280px;
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: 24px;
-  padding-right: 24px;
+  margin: 0 auto;
+  padding: 0 24px;
 }
 
 /* Summary strip: add top spacing inside chrome; remove card-level shadow
@@ -835,9 +834,11 @@ html, body {
   box-shadow: none;
 }
 
-/* Tab bar: left/right padding comes from the .sticky-chrome > * constraint
- * (24px, matching .main). Only override margin and border. */
+/* Tab bar: padding-left/right zeroed because .sticky-chrome-inner already
+ * provides the 24px indent that matches .main. */
 .sticky-chrome .tab-bar {
+  padding-left: 0;
+  padding-right: 0;
   margin-bottom: 0;
   border-bottom: none; /* chrome border-bottom serves this purpose */
 }
@@ -928,7 +929,7 @@ html, body {
 
 /* High-DPI / large desktop (≥ 1440 px): slightly more generous page padding. */
 @media (min-width: 1440px) {
-  .sticky-chrome > * { padding-left: 40px; padding-right: 40px; }
+  .sticky-chrome-inner { padding-left: 40px; padding-right: 40px; }
   .main { padding-left: 40px; padding-right: 40px; }
   .header-inner { padding: 0 40px; }
 }
