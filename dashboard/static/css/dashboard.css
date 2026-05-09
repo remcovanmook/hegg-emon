@@ -908,31 +908,33 @@ html, body {
     border-bottom: none;
   }
 
-  /* Tab bar gets its own sticky positioning and glass background.
-   * Negative margins bleed the background edge-to-edge while the
-   * tab buttons stay at the correct 16px indent via restored padding. */
+  /* Tab bar: position:fixed so it stays at the top regardless of
+   * containing-block height (position:sticky fails when the containing
+   * block is only as tall as the chrome itself). */
+  :root { --tab-bar-h: 44px; }
   .sticky-chrome .tab-bar {
-    position: sticky;
+    position: fixed;
     top: var(--header-h, 56px);
+    left: 0;
+    right: 0;
     z-index: 90;
-    margin-left:  -24px;
-    margin-right: -24px;
     padding-left:  16px;
     padding-right: 16px;
     background: var(--header-bg-glass);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
-    /* Horizontal scroll kept for overflow tabs */
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    /* Negate the margin-bottom reset from global .sticky-chrome .tab-bar */
+    margin-bottom: 0;
   }
   .sticky-chrome .tab-bar::-webkit-scrollbar { display: none; }
   .tab-btn { white-space: nowrap; flex-shrink: 0; }
 
-  /* Main layout tightening. */
-  .main { padding: 16px 16px 48px; gap: 20px; }
+  /* Main layout tightening; extra top padding compensates for the fixed tab bar. */
+  .main { padding: calc(var(--tab-bar-h) + 16px) 16px 48px; gap: 20px; }
 
   /* Cards: single column on mobile — sparklines stack vertically. */
   .cards-row,
