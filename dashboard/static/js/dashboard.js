@@ -216,7 +216,12 @@ let lastWasExporting  = null;
 let liveFlipState     = null;
 let liveFlipTs        = 0;
 let flipCount         = 0;
-let selectedHours     = 24;
+let selectedRange     = "24";
+
+/** Derive effective hours from the current range for bucket/cutoff calculations. */
+function selectedHoursFromRange() {
+    return Math.max(1, (Date.now() - resolveRangeSince(selectedRange)) / 3_600_000);
+}
 
 /**
  * Latest raw phase voltages from the most recent SSE reading.
@@ -377,20 +382,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   initCharts();
   recolorCharts();           // seed chart colours from the active theme
+  initSparklineModal();
 
   // Start the SSE stream and background fetches concurrently.
   // loadHistory is async and will populate charts when the fetch resolves;
   // there is no reason to delay connectSSE or loadSummary while waiting
   // for that to complete.
   connectSSE();
-  loadHistory(selectedHours);
+  loadHistory(resolveRangeSince(selectedRange));
   loadSummary();
   loadDevice();
 
   el.historyRange.addEventListener("change", () => {
-    selectedHours = Number.parseInt(el.historyRange.value, 10);
-    loadHistory(selectedHours);
-    loadSummaryDelta(selectedHours);
+    selectedRange = el.historyRange.value;
+    const since = resolveRangeSince(selectedRange);
+    const hours = selectedHoursFromRange();
+    loadHistory(since);
+    loadSummaryDelta(Math.ceil(hours));
     loadUsageCharts();
   });
 
@@ -438,14 +446,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Rebuild the X-axis cache every 5 minutes. The smallest step across all
   // history windows is 5 minutes (1 h window), so flooredMin never drifts
   // by more than one step between rebuilds.
-  setInterval(() => { buildXAxisCache(selectedHours); applyXAxisConfig(); }, 5 * 60_000);
+  setInterval(() => { buildXAxisCache(selectedHoursFromRange()); applyXAxisConfig(); }, 5 * 60_000);
 
   // Trim data points and annotations that have scrolled out of the history
   // window. Running every 60 s means at most 60 extra live points accumulate
   // before the next prune — invisible on any history window — but avoids
   // the per-second O(n) splice cost of trimming inline with the SSE tick.
   setInterval(() => {
-    const cutoff = Date.now() - selectedHours * 3_600_000;
+    const cutoff = resolveRangeSince(selectedRange);
     [powerChart, ...voltageCharts, ...currentCharts].forEach(c => trimOldPoints(c, cutoff));
     trimOldAnnotations(cutoff);
   }, 60_000);
@@ -667,11 +675,11 @@ function makeDataset(label, color, fill = true) {
  * @param {number} hours
  */
 let currentHistoryFetchId = 0;
-async function loadHistory(hours) {
+async function loadHistory(since) {
   const fetchId = ++currentHistoryFetchId;
   let data;
   try {
-    const res = await fetch(`/api/history?hours=${hours}`);
+    const res = await fetch(`/api/history?since=${since}`);
     if (fetchId !== currentHistoryFetchId) return;
     if (!res.ok) return;
     data = await res.json();
@@ -841,7 +849,7 @@ function applyPendingFrame() {
 /* ── Summary ────────────────────────────────────────────────────────────── */
 
 async function loadSummary() {
-  await Promise.all([loadSummaryLatest(), loadSummaryDelta(selectedHours)]);
+  await Promise.all([loadSummaryLatest(), loadSummaryDelta(Math.ceil(selectedHoursFromRange()))]);
 }
 
 async function loadSummaryLatest() {
@@ -1061,9 +1069,9 @@ async function loadUsageCharts() {
   let gasPrices;
   try {
     const [rC, rP, rGP] = await Promise.all([
-      fetch(`/api/summary/hourly?hours=${selectedHours}`),
-      fetch(`/api/prices?hours=${selectedHours}`),
-      fetch(`/api/prices/gas?hours=${selectedHours}`),
+      fetch(`/api/summary/hourly?hours=${Math.ceil(selectedHoursFromRange())}`),
+      fetch(`/api/prices?hours=${Math.ceil(selectedHoursFromRange())}`),
+      fetch(`/api/prices/gas?hours=${Math.ceil(selectedHoursFromRange())}`),
     ]);
     if (fetchId !== currentUsageFetchId) return;
     if (!rC.ok || rC.status === 204) return;
@@ -1089,7 +1097,7 @@ async function loadUsageCharts() {
   // Hours with no data get 0 so the x-axis spans the complete range.
   const HOUR_MS  = 3_600_000;
   const nowMs    = Date.now();
-  const startMs  = Math.floor((nowMs - selectedHours * HOUR_MS) / HOUR_MS) * HOUR_MS;
+  const startMs  = Math.floor(resolveRangeSince(selectedRange) / HOUR_MS) * HOUR_MS;
 
   const labels = [], d1 = [], d2 = [], r1 = [], r2 = [], gas = [];
   const importCost = [], exportRevenue = [], gasCost = [];
@@ -1172,7 +1180,8 @@ async function loadUsageCharts() {
   }
 
   // Period label, matching the format used by loadSummaryDelta.
-  const _label = selectedHours >= 24 ? `${Math.round(selectedHours / 24)}d` : `${selectedHours}h`;
+  const _hours = selectedHoursFromRange();
+  const _label = _hours >= 24 ? `${Math.round(_hours / 24)}d` : `${Math.round(_hours)}h`;
 
   // Usage totals.
   const totalDel  = d1.reduce((a, b) => a + b, 0) + d2.reduce((a, b) => a + b, 0);
@@ -1629,7 +1638,7 @@ function appendToCharts(r) {
  * @returns {object} Smoothed reading (same shape, timestamp unchanged).
  */
 function smoothReading(r) {
-  const bucketSeconds = Math.max(5, Math.floor((selectedHours * 3600) / 500));
+  const bucketSeconds = Math.max(5, Math.floor((selectedHoursFromRange() * 3600) / 500));
   const alpha = 2 / (bucketSeconds + 1);
   if (ema === null) {
     ema = { ...r };

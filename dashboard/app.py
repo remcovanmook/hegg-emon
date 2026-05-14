@@ -212,8 +212,10 @@ def api_history() -> Response:
     """Return bucketed historical readings.
 
     Query parameters:
-        hours  (int, 1-168): Time window.  Default 24.
-        bucket (int):        Bucket width in seconds.  Default: auto (~500 pts).
+        hours  (int):  Time window in hours. Default 24.
+        since  (int):  Unix-ms start timestamp. Takes precedence over hours
+                       when provided, enabling calendar-based ranges.
+        bucket (int):  Bucket width in seconds. Default: auto (~500 pts).
 
     Returns:
         JSON array of averaged reading dicts, or 503 if the store is not ready.
@@ -221,11 +223,17 @@ def api_history() -> Response:
     if _store is None:
         return make_response(jsonify({"error": "store not initialised"}), 503)
 
-    hours = max(1, min(int(request.args.get("hours", 24)), 168))
-    auto_bucket = max(10, (hours * 3600) // 500)
+    since_param = request.args.get("since")
+    if since_param is not None:
+        since = datetime.fromtimestamp(int(since_param) / 1000, tz=timezone.utc)
+        hours = max(1, (datetime.now(timezone.utc) - since).total_seconds() / 3600)
+    else:
+        hours = max(1, int(request.args.get("hours", 24)))
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    auto_bucket = max(10, int((hours * 3600) // 500))
     bucket = int(request.args.get("bucket", auto_bucket))
 
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
     return jsonify(_store.query(since, bucket_seconds=bucket))
 
 
