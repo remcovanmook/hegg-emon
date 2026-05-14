@@ -691,7 +691,7 @@ async function loadHistory(since) {
   // any queued renders, input events, or SSE messages get a chance to run.
   await yieldToMain();
 
-  pendingHistoryFrame = computeHistoryFrame(data, hours);
+  pendingHistoryFrame = computeHistoryFrame(data, selectedHoursFromRange());
 
   // Apply on the next animation frame in case SSE hasn't connected yet.
   requestAnimationFrame(applyPendingFrame);
