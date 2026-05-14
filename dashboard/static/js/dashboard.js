@@ -974,24 +974,6 @@ document.addEventListener("dashboard:tabswitch", ({ detail }) => {
   }
 });
 
-  }
-  // Chart.js cannot measure a hidden element; resize after reveal.
-  // Also force a data repaint so any updates that arrived while the
-  // electricity tab was hidden are rendered immediately on switch.
-  if (tabId === "usage") {
-    [usageChart, costChart, gasChart, gasCostChart].forEach(c => {
-      if (c) { c.resize(); c.update("none"); }
-    });
-  } else if (tabId === "forecast") {
-    [forecastElecChart, forecastGasChart, forecastTempChart, forecastSolarChart].forEach(c => {
-      if (c) { c.resize(); c.update("none"); }
-    });
-  } else {
-    [powerChart, ...voltageCharts, ...currentCharts].forEach(c => {
-      if (c) { c.resize(); c.update("none"); }
-    });
-  }
-}
 
 /* ── Shared bar-chart options factory ─────────────────────────────────── */
 
